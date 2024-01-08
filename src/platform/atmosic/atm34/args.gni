@@ -1,0 +1,5 @@
+chip_device_platform = "atm34"
+
+declare_args() {
+  chip_malloc_sys_heap = false
+}

@@ -1,4 +1,4 @@
-# Copyright (c) 2021 Project CHIP Authors
+# Copyright (c) 2024 Atmosic
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,18 +13,17 @@
 # limitations under the License.
 
 import("//build_overrides/chip.gni")
-import("//build_overrides/chip.gni")
 import("//build_overrides/zephyr.gni")
 
-import("${chip_root}/src/platform/Zephyr/args.gni")
+import("${chip_root}/src/platform/atmosic/atm34/args.gni")
 import("${chip_root}/src/platform/device.gni")
 
-assert(chip_device_platform == "zephyr")
+assert(chip_device_platform == "atm34")
 
-static_library("Zephyr") {
+static_library("atm34") {
   sources = [
-    "../SingletonConfigurationManager.cpp",
-    "BLEAdvertisingArbiter.cpp",
+    "../../SingletonConfigurationManager.cpp",
+    "../../Zephyr/BLEAdvertisingArbiter.cpp",
     "BLEAdvertisingArbiter.h",
     "BLEManagerImpl.cpp",
     "BLEManagerImpl.h",
@@ -32,22 +31,25 @@ static_library("Zephyr") {
     "CHIPDevicePlatformConfig.h",
     "CHIPDevicePlatformEvent.h",
     "CHIPPlatformConfig.h",
-    "ConfigurationManagerImpl.cpp",
+    "../../Zephyr/ConfigurationManagerImpl.cpp",
     "ConfigurationManagerImpl.h",
-    "ConnectivityManagerImpl.cpp",
+    "../../Zephyr/ConnectivityManagerImpl.cpp",
     "ConnectivityManagerImpl.h",
-    "DiagnosticDataProviderImpl.cpp",
+    "DeviceInstanceInfoProviderImpl.cpp",
+    "DeviceInstanceInfoProviderImpl.h",
+    "../../Zephyr/DiagnosticDataProviderImpl.cpp",
+    "../../Zephyr/DiagnosticDataProviderImplGetter.cpp",
     "DiagnosticDataProviderImpl.h",
     "InetPlatformConfig.h",
-    "KeyValueStoreManagerImpl.cpp",
+    "../../Zephyr/KeyValueStoreManagerImpl.cpp",
     "KeyValueStoreManagerImpl.h",
-    "Logging.cpp",
-    "PlatformManagerImpl.cpp",
+    "../../Zephyr/Logging.cpp",
+    "../../Zephyr/PlatformManagerImpl.cpp",
     "PlatformManagerImpl.h",
     "SysHeapMalloc.h",
     "SystemPlatformConfig.h",
-    "SystemTimeSupport.cpp",
-    "ZephyrConfig.cpp",
+    "../../Zephyr/SystemTimeSupport.cpp",
+    "../../Zephyr/ZephyrConfig.cpp",
     "ZephyrConfig.h",
   ]
 
@@ -55,30 +57,23 @@ static_library("Zephyr") {
 
   if (chip_enable_openthread) {
     sources += [
-      "../OpenThread/OpenThreadUtils.cpp",
+      "../../OpenThread/OpenThreadUtils.cpp",
       "ThreadStackManagerImpl.cpp",
       "ThreadStackManagerImpl.h",
     ]
 
     if (chip_mdns == "platform") {
       sources += [
-        "../OpenThread/DnssdImpl.cpp",
-        "../OpenThread/OpenThreadDnssdImpl.cpp",
-        "../OpenThread/OpenThreadDnssdImpl.h",
+        "../../OpenThread/DnssdImpl.cpp",
+        "../../OpenThread/OpenThreadDnssdImpl.cpp",
+        "../../OpenThread/OpenThreadDnssdImpl.h",
       ]
       deps = [ "${chip_root}/src/lib/dnssd:platform_header" ]
     }
   }
 
-  if (chip_enable_nfc) {
-    sources += [
-      "NFCManagerImpl.cpp",
-      "NFCManagerImpl.h",
-    ]
-  }
-
   if (chip_malloc_sys_heap) {
-    sources += [ "SysHeapMalloc.cpp" ]
+    sources += [ "../../Zephyr/SysHeapMalloc.cpp" ]
   }
 
   cflags = [ "-Wconversion" ]

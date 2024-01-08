@@ -1,0 +1,1 @@
+../../Zephyr/BlePlatformConfig.h
