@@ -161,6 +161,8 @@ void * WRAP(calloc)(size_t num, size_t size) __attribute((alias("_ZN4chip11Devic
 void * WRAP(realloc)(void * mem, size_t size) __attribute((alias("_ZN4chip11DeviceLayer6Malloc7ReallocEPvj")));
 void WRAP(free)(void * mem) __attribute((alias("_ZN4chip11DeviceLayer6Malloc4FreeEPv")));
 
+struct _reent;
+
 void * WRAP(_malloc_r)(_reent *, size_t size)
 {
     return WRAP(malloc)(size);
