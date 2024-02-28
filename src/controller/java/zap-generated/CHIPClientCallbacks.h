@@ -248,6 +248,8 @@ typedef void (*NetworkCommissioningNetworksListAttributeCallback)(
     void * context,
     const chip::app::DataModel::DecodableList<
         chip::app::Clusters::NetworkCommissioning::Structs::NetworkInfoStruct::DecodableType> & data);
+typedef void (*NetworkCommissioningSupportedWiFiBandsListAttributeCallback)(
+    void * context, const chip::app::DataModel::DecodableList<chip::app::Clusters::NetworkCommissioning::WiFiBandEnum> & data);
 typedef void (*NetworkCommissioningGeneratedCommandListListAttributeCallback)(
     void * context, const chip::app::DataModel::DecodableList<chip::CommandId> & data);
 typedef void (*NetworkCommissioningAcceptedCommandListListAttributeCallback)(
@@ -1001,3 +1003,11 @@ typedef void (*FaultInjectionEventListListAttributeCallback)(void * context,
                                                              const chip::app::DataModel::DecodableList<chip::EventId> & data);
 typedef void (*FaultInjectionAttributeListListAttributeCallback)(
     void * context, const chip::app::DataModel::DecodableList<chip::AttributeId> & data);
+typedef void (*SampleMeiGeneratedCommandListListAttributeCallback)(
+    void * context, const chip::app::DataModel::DecodableList<chip::CommandId> & data);
+typedef void (*SampleMeiAcceptedCommandListListAttributeCallback)(
+    void * context, const chip::app::DataModel::DecodableList<chip::CommandId> & data);
+typedef void (*SampleMeiEventListListAttributeCallback)(void * context,
+                                                        const chip::app::DataModel::DecodableList<chip::EventId> & data);
+typedef void (*SampleMeiAttributeListListAttributeCallback)(void * context,
+                                                            const chip::app::DataModel::DecodableList<chip::AttributeId> & data);

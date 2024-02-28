@@ -54,6 +54,7 @@ static_library("atm34") {
   ]
 
   public_deps = [ "${chip_root}/src/platform:platform_base" ]
+  deps = [ "${chip_root}/src/platform/logging:headers" ]
 
   if (chip_enable_openthread) {
     sources += [
@@ -68,7 +69,7 @@ static_library("atm34") {
         "../../OpenThread/OpenThreadDnssdImpl.cpp",
         "../../OpenThread/OpenThreadDnssdImpl.h",
       ]
-      deps = [ "${chip_root}/src/lib/dnssd:platform_header" ]
+      deps += [ "${chip_root}/src/lib/dnssd:platform_header" ]
     }
   }
 

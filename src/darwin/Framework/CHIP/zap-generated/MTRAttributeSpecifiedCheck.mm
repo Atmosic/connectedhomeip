@@ -990,6 +990,15 @@ static BOOL AttributeIsSpecifiedInNetworkCommissioningCluster(AttributeId aAttri
     case Attributes::LastConnectErrorValue::Id: {
         return YES;
     }
+    case Attributes::SupportedWiFiBands::Id: {
+        return YES;
+    }
+    case Attributes::SupportedThreadFeatures::Id: {
+        return YES;
+    }
+    case Attributes::ThreadVersion::Id: {
+        return YES;
+    }
     case Attributes::GeneratedCommandList::Id: {
         return YES;
     }
@@ -1069,6 +1078,9 @@ static BOOL AttributeIsSpecifiedInGeneralDiagnosticsCluster(AttributeId aAttribu
         return YES;
     }
     case Attributes::TestEventTriggersEnabled::Id: {
+        return YES;
+    }
+    case Attributes::AverageWearCount::Id: {
         return YES;
     }
     case Attributes::GeneratedCommandList::Id: {
@@ -1860,10 +1872,10 @@ static BOOL AttributeIsSpecifiedInICDManagementCluster(AttributeId aAttributeId)
 {
     using namespace Clusters::IcdManagement;
     switch (aAttributeId) {
-    case Attributes::IdleModeInterval::Id: {
+    case Attributes::IdleModeDuration::Id: {
         return YES;
     }
-    case Attributes::ActiveModeInterval::Id: {
+    case Attributes::ActiveModeDuration::Id: {
         return YES;
     }
     case Attributes::ActiveModeThreshold::Id: {
@@ -1876,6 +1888,12 @@ static BOOL AttributeIsSpecifiedInICDManagementCluster(AttributeId aAttributeId)
         return YES;
     }
     case Attributes::ClientsSupportedPerFabric::Id: {
+        return YES;
+    }
+    case Attributes::UserActiveModeTriggerHint::Id: {
+        return YES;
+    }
+    case Attributes::UserActiveModeTriggerInstruction::Id: {
         return YES;
     }
     case Attributes::GeneratedCommandList::Id: {
@@ -2073,9 +2091,6 @@ static BOOL AttributeIsSpecifiedInRVCRunModeCluster(AttributeId aAttributeId)
     case Attributes::CurrentMode::Id: {
         return YES;
     }
-    case Attributes::StartUpMode::Id: {
-        return YES;
-    }
     case Attributes::OnMode::Id: {
         return YES;
     }
@@ -2110,9 +2125,6 @@ static BOOL AttributeIsSpecifiedInRVCCleanModeCluster(AttributeId aAttributeId)
         return YES;
     }
     case Attributes::CurrentMode::Id: {
-        return YES;
-    }
-    case Attributes::StartUpMode::Id: {
         return YES;
     }
     case Attributes::OnMode::Id: {
@@ -5453,6 +5465,36 @@ static BOOL AttributeIsSpecifiedInUnitTestingCluster(AttributeId aAttributeId)
     }
     }
 }
+static BOOL AttributeIsSpecifiedInSampleMEICluster(AttributeId aAttributeId)
+{
+    using namespace Clusters::SampleMei;
+    switch (aAttributeId) {
+    case Attributes::FlipFlop::Id: {
+        return YES;
+    }
+    case Attributes::GeneratedCommandList::Id: {
+        return YES;
+    }
+    case Attributes::AcceptedCommandList::Id: {
+        return YES;
+    }
+    case Attributes::EventList::Id: {
+        return YES;
+    }
+    case Attributes::AttributeList::Id: {
+        return YES;
+    }
+    case Attributes::FeatureMap::Id: {
+        return YES;
+    }
+    case Attributes::ClusterRevision::Id: {
+        return YES;
+    }
+    default: {
+        return NO;
+    }
+    }
+}
 
 BOOL MTRAttributeIsSpecified(ClusterId aClusterId, AttributeId aAttributeId)
 {
@@ -5735,6 +5777,9 @@ BOOL MTRAttributeIsSpecified(ClusterId aClusterId, AttributeId aAttributeId)
     }
     case Clusters::UnitTesting::Id: {
         return AttributeIsSpecifiedInUnitTestingCluster(aAttributeId);
+    }
+    case Clusters::SampleMei::Id: {
+        return AttributeIsSpecifiedInSampleMEICluster(aAttributeId);
     }
     default: {
         return NO;

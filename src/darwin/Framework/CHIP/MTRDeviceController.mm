@@ -16,6 +16,12 @@
  */
 #import <Matter/MTRDefines.h>
 
+#if MTR_PER_CONTROLLER_STORAGE_ENABLED
+#import <Matter/MTRDeviceControllerParameters.h>
+#else
+#import "MTRDeviceControllerParameters_Wrapper.h"
+#endif // MTR_PER_CONTROLLER_STORAGE_ENABLED
+
 #import "MTRDeviceController_Internal.h"
 
 #import "MTRAttestationTrustStoreBridge.h"
@@ -47,6 +53,8 @@
 
 #include <platform/CHIPDeviceBuildConfig.h>
 
+#include <app-common/zap-generated/cluster-objects.h>
+#include <app/data-model/List.h>
 #include <controller/CHIPDeviceController.h>
 #include <controller/CHIPDeviceControllerFactory.h>
 #include <controller/CommissioningWindowOpener.h>
@@ -119,6 +127,20 @@ typedef BOOL (^SyncWorkQueueBlockWithBoolReturnValue)(void);
 
 @implementation MTRDeviceController
 
+- (nullable instancetype)initWithParameters:(MTRDeviceControllerParameters *)parameters error:(NSError * __autoreleasing *)error
+{
+    __auto_type * factory = [MTRDeviceControllerFactory sharedInstance];
+    if (!factory.isRunning) {
+        auto * params = [[MTRDeviceControllerFactoryParams alloc] initWithoutStorage];
+
+        if (![factory startControllerFactory:params error:error]) {
+            return nil;
+        }
+    }
+
+    return [factory initializeController:self withParameters:parameters error:error];
+}
+
 - (instancetype)initWithFactory:(MTRDeviceControllerFactory *)factory
                           queue:(dispatch_queue_t)queue
                 storageDelegate:(id<MTRDeviceControllerStorageDelegate> _Nullable)storageDelegate
@@ -158,37 +180,28 @@ typedef BOOL (^SyncWorkQueueBlockWithBoolReturnValue)(void);
 
         if (otaProviderDelegate != nil) {
             if (![otaProviderDelegate respondsToSelector:@selector(handleQueryImageForNodeID:controller:params:completion:)]
-                && ![otaProviderDelegate respondsToSelector:@selector(handleQueryImageForNodeID:
-                                                                                     controller:params:completionHandler:)]) {
+                && ![otaProviderDelegate respondsToSelector:@selector(handleQueryImageForNodeID:controller:params:completionHandler:)]) {
                 MTR_LOG_ERROR("Error: MTROTAProviderDelegate does not support handleQueryImageForNodeID");
                 return nil;
             }
             if (![otaProviderDelegate respondsToSelector:@selector(handleApplyUpdateRequestForNodeID:controller:params:completion:)]
-                && ![otaProviderDelegate
-                    respondsToSelector:@selector(handleApplyUpdateRequestForNodeID:controller:params:completionHandler:)]) {
+                && ![otaProviderDelegate respondsToSelector:@selector(handleApplyUpdateRequestForNodeID:controller:params:completionHandler:)]) {
                 MTR_LOG_ERROR("Error: MTROTAProviderDelegate does not support handleApplyUpdateRequestForNodeID");
                 return nil;
             }
-            if (![otaProviderDelegate respondsToSelector:@selector(handleNotifyUpdateAppliedForNodeID:
-                                                                                           controller:params:completion:)]
+            if (![otaProviderDelegate respondsToSelector:@selector(handleNotifyUpdateAppliedForNodeID:controller:params:completion:)]
                 && ![otaProviderDelegate
                     respondsToSelector:@selector(handleNotifyUpdateAppliedForNodeID:controller:params:completionHandler:)]) {
                 MTR_LOG_ERROR("Error: MTROTAProviderDelegate does not support handleNotifyUpdateAppliedForNodeID");
                 return nil;
             }
-            if (![otaProviderDelegate respondsToSelector:@selector
-                                      (handleBDXTransferSessionBeginForNodeID:controller:fileDesignator:offset:completion:)]
-                && ![otaProviderDelegate respondsToSelector:@selector
-                                         (handleBDXTransferSessionBeginForNodeID:
-                                                                      controller:fileDesignator:offset:completionHandler:)]) {
+            if (![otaProviderDelegate respondsToSelector:@selector(handleBDXTransferSessionBeginForNodeID:controller:fileDesignator:offset:completion:)]
+                && ![otaProviderDelegate respondsToSelector:@selector(handleBDXTransferSessionBeginForNodeID:controller:fileDesignator:offset:completionHandler:)]) {
                 MTR_LOG_ERROR("Error: MTROTAProviderDelegate does not support handleBDXTransferSessionBeginForNodeID");
                 return nil;
             }
-            if (![otaProviderDelegate
-                    respondsToSelector:@selector(handleBDXQueryForNodeID:controller:blockSize:blockIndex:bytesToSkip:completion:)]
-                && ![otaProviderDelegate
-                    respondsToSelector:@selector(handleBDXQueryForNodeID:
-                                                              controller:blockSize:blockIndex:bytesToSkip:completionHandler:)]) {
+            if (![otaProviderDelegate respondsToSelector:@selector(handleBDXQueryForNodeID:controller:blockSize:blockIndex:bytesToSkip:completion:)]
+                && ![otaProviderDelegate respondsToSelector:@selector(handleBDXQueryForNodeID:controller:blockSize:blockIndex:bytesToSkip:completionHandler:)]) {
                 MTR_LOG_ERROR("Error: MTROTAProviderDelegate does not support handleBDXQueryForNodeID");
                 return nil;
             }
@@ -667,6 +680,57 @@ typedef BOOL (^SyncWorkQueueBlockWithBoolReturnValue)(void);
         if (commissioningParams.countryCode != nil) {
             params.SetCountryCode(AsCharSpan(commissioningParams.countryCode));
         }
+
+        // Set up the right timezone and DST information.  For timezone, just
+        // use our current timezone and don't schedule any sort of timezone
+        // change.
+        auto * tz = [NSTimeZone localTimeZone];
+        using TimeZoneType = chip::app::Clusters::TimeSynchronization::Structs::TimeZoneStruct::Type;
+        TimeZoneType timeZone;
+        timeZone.validAt = 0;
+        timeZone.offset = static_cast<int32_t>(tz.secondsFromGMT - tz.daylightSavingTimeOffset);
+        timeZone.name.Emplace(AsCharSpan(tz.name));
+
+        params.SetTimeZone(chip::app::DataModel::List<TimeZoneType>(&timeZone, 1));
+
+        // For DST, there is no limit to the number of transitions we could try
+        // to add, but in practice devices likely support only 2 and
+        // AutoCommissioner caps the list at 10.  Let's do up to 4 transitions
+        // for now.
+        using DSTOffsetType = chip::app::Clusters::TimeSynchronization::Structs::DSTOffsetStruct::Type;
+
+        DSTOffsetType dstOffsets[4];
+        size_t dstOffsetCount = 0;
+        auto nextOffset = tz.daylightSavingTimeOffset;
+        uint64_t nextValidStarting = 0;
+        auto * nextTransition = tz.nextDaylightSavingTimeTransition;
+        for (auto & dstOffset : dstOffsets) {
+            ++dstOffsetCount;
+            dstOffset.offset = static_cast<int32_t>(nextOffset);
+            dstOffset.validStarting = nextValidStarting;
+            if (nextTransition != nil) {
+                uint32_t transitionEpochS;
+                if (DateToMatterEpochSeconds(nextTransition, transitionEpochS)) {
+                    using Microseconds64 = chip::System::Clock::Microseconds64;
+                    using Seconds32 = chip::System::Clock::Seconds32;
+                    dstOffset.validUntil.SetNonNull(Microseconds64(Seconds32(transitionEpochS)).count());
+                } else {
+                    // Out of range; treat as "forever".
+                    dstOffset.validUntil.SetNull();
+                }
+            } else {
+                dstOffset.validUntil.SetNull();
+            }
+
+            if (dstOffset.validUntil.IsNull()) {
+                break;
+            }
+
+            nextOffset = [tz daylightSavingTimeOffsetForDate:nextTransition];
+            nextValidStarting = dstOffset.validUntil.Value();
+            nextTransition = [tz nextDaylightSavingTimeTransitionAfterDate:nextTransition];
+        }
+        params.SetDSTOffsets(chip::app::DataModel::List<DSTOffsetType>(dstOffsets, dstOffsetCount));
 
         chip::NodeId deviceId = [nodeID unsignedLongLongValue];
         self->_operationalCredentialsDelegate->SetDeviceID(deviceId);

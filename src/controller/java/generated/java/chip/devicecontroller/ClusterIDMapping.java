@@ -318,6 +318,9 @@ public class ClusterIDMapping {
         }
         if (clusterId == FaultInjection.ID) {
             return new FaultInjection();
+        }
+        if (clusterId == SampleMei.ID) {
+            return new SampleMei();
         }return null;
     }
     public static class Identify implements BaseCluster {
@@ -3408,6 +3411,9 @@ public class ClusterIDMapping {
             LastNetworkingStatus(5L),
             LastNetworkID(6L),
             LastConnectErrorValue(7L),
+            SupportedWiFiBands(8L),
+            SupportedThreadFeatures(9L),
+            ThreadVersion(10L),
             GeneratedCommandList(65528L),
             AcceptedCommandList(65529L),
             EventList(65530L),
@@ -3743,6 +3749,7 @@ public class ClusterIDMapping {
             ActiveRadioFaults(6L),
             ActiveNetworkFaults(7L),
             TestEventTriggersEnabled(8L),
+            AverageWearCount(9L),
             GeneratedCommandList(65528L),
             AcceptedCommandList(65529L),
             EventList(65530L),
@@ -5955,12 +5962,14 @@ public class ClusterIDMapping {
         }
 
         public enum Attribute {
-            IdleModeInterval(0L),
-            ActiveModeInterval(1L),
+            IdleModeDuration(0L),
+            ActiveModeDuration(1L),
             ActiveModeThreshold(2L),
             RegisteredClients(3L),
             ICDCounter(4L),
             ClientsSupportedPerFabric(5L),
+            UserActiveModeTriggerHint(6L),
+            UserActiveModeTriggerInstruction(7L),
             GeneratedCommandList(65528L),
             AcceptedCommandList(65529L),
             EventList(65530L),
@@ -6572,7 +6581,6 @@ public class ClusterIDMapping {
         public enum Attribute {
             SupportedModes(0L),
             CurrentMode(1L),
-            StartUpMode(2L),
             OnMode(3L),
             GeneratedCommandList(65528L),
             AcceptedCommandList(65529L),
@@ -6694,7 +6702,6 @@ public class ClusterIDMapping {
         public enum Attribute {
             SupportedModes(0L),
             CurrentMode(1L),
-            StartUpMode(2L),
             OnMode(3L),
             GeneratedCommandList(65528L),
             AcceptedCommandList(65529L),
@@ -14129,6 +14136,126 @@ public class ClusterIDMapping {
                     }
                     public static FailRandomlyAtFaultCommandField value(int id) throws NoSuchFieldError {
                         for (FailRandomlyAtFaultCommandField field : FailRandomlyAtFaultCommandField.values()) {
+                        if (field.getID() == id) {
+                            return field;
+                        }
+                        }
+                        throw new NoSuchFieldError();
+                    }
+                }@Override
+        public String getAttributeName(long id) throws NoSuchFieldError {
+            return Attribute.value(id).toString();
+        }
+
+        @Override
+        public String getEventName(long id) throws NoSuchFieldError {
+            return Event.value(id).toString();
+        }
+
+        @Override
+        public String getCommandName(long id) throws NoSuchFieldError {
+            return Command.value(id).toString();
+        }
+
+        @Override
+        public long getAttributeID(String name) throws IllegalArgumentException {
+            return Attribute.valueOf(name).getID();
+        }
+
+        @Override
+        public long getEventID(String name) throws IllegalArgumentException {
+            return Event.valueOf(name).getID();
+        }
+
+        @Override
+        public long getCommandID(String name) throws IllegalArgumentException {
+            return Command.valueOf(name).getID();
+        }
+    }
+    public static class SampleMei implements BaseCluster {
+        public static final long ID = 4294048800L;
+        public long getID() {
+            return ID;
+        }
+
+        public enum Attribute {
+            FlipFlop(0L),
+            GeneratedCommandList(65528L),
+            AcceptedCommandList(65529L),
+            EventList(65530L),
+            AttributeList(65531L),
+            FeatureMap(65532L),
+            ClusterRevision(65533L),;
+            private final long id;
+            Attribute(long id) {
+                this.id = id;
+            }
+
+            public long getID() {
+                return id;
+            }
+
+            public static Attribute value(long id) throws NoSuchFieldError {
+                for (Attribute attribute : Attribute.values()) {
+                    if (attribute.getID() == id) {
+                        return attribute;
+                    }
+                }
+                throw new NoSuchFieldError();
+            }
+        }
+
+        public enum Event {;
+            private final long id;
+            Event(long id) {
+                this.id = id;
+            }
+
+            public long getID() {
+                return id;
+            }
+
+            public static Event value(long id) throws NoSuchFieldError {
+                for (Event event : Event.values()) {
+                    if (event.getID() == id) {
+                        return event;
+                    }
+                }
+                throw new NoSuchFieldError();
+            }
+        }
+
+        public enum Command {
+            Ping(0L),
+            AddArguments(2L),;
+            private final long id;
+            Command(long id) {
+                this.id = id;
+            }
+
+            public long getID() {
+                return id;
+            }
+
+            public static Command value(long id) throws NoSuchFieldError {
+                for (Command command : Command.values()) {
+                    if (command.getID() == id) {
+                        return command;
+                    }
+                }
+                throw new NoSuchFieldError();
+            }
+        }public enum AddArgumentsCommandField {Arg1(0),Arg2(1),;
+                    private final int id;
+                    AddArgumentsCommandField(int id) {
+                        this.id = id;
+                    }
+
+                    public int getID() {
+                        return id;
+                    }
+                    public static AddArgumentsCommandField value(int id) throws NoSuchFieldError {
+                        for (AddArgumentsCommandField field : AddArgumentsCommandField.values()) {
                         if (field.getID() == id) {
                             return field;
                         }

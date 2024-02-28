@@ -248,7 +248,7 @@ tests:
               minValue: 0
               maxValue: 11
 
-    - label: "Step 2c: TH writes LockType attribute as 10"
+    - label: "Step 2b: TH writes LockType attribute as 10"
       PICS: DRLK.S.A0001
       command: "writeAttribute"
       attribute: "LockType"
@@ -945,10 +945,20 @@ tests:
       command: "readAttribute"
       attribute: "SupportedOperatingModes"
       response:
-          value: 0xFFF6
           saveAs: Current_Supported
           constraints:
               type: enum16
+              anyOf:
+                  [
+                      0xFFF6,
+                      0xFFF4,
+                      0xFFF2,
+                      0xFFF0,
+                      0xFFE6,
+                      0xFFE4,
+                      0xFFE2,
+                      0xFFE0,
+                  ]
 
     - label:
           "Step 23b: TH writes Supported OperatingModes attribute as bit 0 is
