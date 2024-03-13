@@ -42,8 +42,10 @@ ThreadStackManagerImpl ThreadStackManagerImpl::sInstance;
 
 CHIP_ERROR ThreadStackManagerImpl::_InitThreadStack()
 {
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     mRadioBlocked = false;
     mReadyToAttach = false;
+#endif
     otInstance * const instance = openthread_get_default_instance();
 
     ReturnErrorOnFailure(GenericThreadStackManagerImpl_OpenThread<ThreadStackManagerImpl>::DoInit(instance));
@@ -87,6 +89,7 @@ void ThreadStackManagerImpl::_UnlockThreadStack()
     openthread_api_mutex_unlock(openthread_get_default_context());
 }
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
 CHIP_ERROR
 ThreadStackManagerImpl::_AttachToThreadNetwork(const Thread::OperationalDataset & dataset,
                                                NetworkCommissioning::Internal::WirelessDriver::ConnectCallback * callback)
@@ -138,6 +141,7 @@ void ThreadStackManagerImpl::Finalize(void)
     otInstanceFinalize(openthread_get_default_instance());
     ThreadStackMgr().UnlockThreadStack();
 }
+#endif
 
 } // namespace DeviceLayer
 } // namespace chip

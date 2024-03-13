@@ -45,9 +45,11 @@
 
 #include <array>
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
 #include "ble_driver.h"
 #include "radio_hal_ble.h"
 #include "radio_hal_154.h"
+#endif
 
 using namespace ::chip;
 using namespace ::chip::Ble;
@@ -147,9 +149,11 @@ BLEManagerImpl BLEManagerImpl::sInstance;
 
 CHIP_ERROR BLEManagerImpl::_Init()
 {
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     mBLERadioInitialized = false;
     mconId = NULL;
     mInternalScanCallback = new InternalScanCallback(this);
+#endif
 
     mServiceMode = ConnectivityManager::kCHIPoBLEServiceMode_Enabled;
     mFlags.ClearAll().Set(Flags::kAdvertisingEnabled, CHIP_DEVICE_CONFIG_CHIPOBLE_ENABLE_ADVERTISING_AUTOSTART);
@@ -159,7 +163,7 @@ CHIP_ERROR BLEManagerImpl::_Init()
     memset(mSubscribedConns, 0, sizeof(mSubscribedConns));
 
     ReturnErrorOnFailure(InitRandomStaticAddress());
-#ifdef FIXME_CONCURRENT_BLE_154
+#ifdef CONFIG_ATM_RADIO_HAL_MGR
     int err = bt_enable(NULL);
     VerifyOrReturnError(err == 0, MapErrorZephyr(err));
 #endif
@@ -180,9 +184,11 @@ CHIP_ERROR BLEManagerImpl::_Init()
 
 void BLEManagerImpl::_Shutdown()
 {
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     ChipLogProgress(DeviceLayer, "BLE Shutdown");
     bt_disable();
     mBLERadioInitialized = false;
+#endif
 }
 
 void BLEManagerImpl::DriveBLEState(intptr_t arg)
@@ -272,22 +278,36 @@ inline CHIP_ERROR BLEManagerImpl::PrepareAdvertisingRequest()
     advertisingData[1]  = BT_DATA(BT_DATA_SVC_DATA16, &serviceData, sizeof(serviceData));
     scanResponseData[0] = BT_DATA(BT_DATA_NAME_COMPLETE, name, nameSize);
 
-    mAdvertisingRequest.priority    = CHIP_DEVICE_BLE_ADVERTISING_PRIORITY;
-    mAdvertisingRequest.options     = kAdvertisingOptions;
-    mAdvertisingRequest.minInterval = mFlags.Has(Flags::kFastAdvertisingEnabled)
-        ? CHIP_DEVICE_CONFIG_BLE_FAST_ADVERTISING_INTERVAL_MIN
-        : CHIP_DEVICE_CONFIG_BLE_SLOW_ADVERTISING_INTERVAL_MIN;
-    mAdvertisingRequest.maxInterval = mFlags.Has(Flags::kFastAdvertisingEnabled)
-        ? CHIP_DEVICE_CONFIG_BLE_FAST_ADVERTISING_INTERVAL_MAX
-        : CHIP_DEVICE_CONFIG_BLE_SLOW_ADVERTISING_INTERVAL_MAX;
+    mAdvertisingRequest.priority         = CHIP_DEVICE_BLE_ADVERTISING_PRIORITY;
+    mAdvertisingRequest.options          = kAdvertisingOptions;
+    mAdvertisingRequest.minInterval      = mFlags.Has(Flags::kFastAdvertisingEnabled)
+             ? CHIP_DEVICE_CONFIG_BLE_FAST_ADVERTISING_INTERVAL_MIN
+             : CHIP_DEVICE_CONFIG_BLE_SLOW_ADVERTISING_INTERVAL_MIN;
+    mAdvertisingRequest.maxInterval      = mFlags.Has(Flags::kFastAdvertisingEnabled)
+             ? CHIP_DEVICE_CONFIG_BLE_FAST_ADVERTISING_INTERVAL_MAX
+             : CHIP_DEVICE_CONFIG_BLE_SLOW_ADVERTISING_INTERVAL_MAX;
     mAdvertisingRequest.advertisingData  = Span<bt_data>(advertisingData);
     mAdvertisingRequest.scanResponseData = nameSize ? Span<bt_data>(scanResponseData) : Span<bt_data>{};
+
+#ifdef CONFIG_ATM_RADIO_HAL_MGR
+    mAdvertisingRequest.onStarted = [](int rc) {
+        if (rc == 0)
+        {
+            ChipLogProgress(DeviceLayer, "CHIPoBLE advertising started");
+        }
+        else
+        {
+            ChipLogError(DeviceLayer, "Failed to start CHIPoBLE advertising: %d", rc);
+        }
+    };
+#endif
 
     return CHIP_NO_ERROR;
 }
 
 CHIP_ERROR BLEManagerImpl::StartAdvertising()
 {
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     if (ConnectivityMgr().IsThreadProvisioned())
     {
         ChipLogProgress(DeviceLayer, "Thread provisioned, can't StartAdvertising");
@@ -329,6 +349,7 @@ CHIP_ERROR BLEManagerImpl::StartAdvertisingProcess(void)
         (void) bt_set_name(bt_dev_name);
         mBLERadioInitialized = true;
     }
+#endif
 
     // Prepare advertising request
     ReturnErrorOnFailure(PrepareAdvertisingRequest());
@@ -352,6 +373,9 @@ CHIP_ERROR BLEManagerImpl::StartAdvertisingProcess(void)
 #endif
 
     // Request advertising
+#ifdef CONFIG_ATM_RADIO_HAL_MGR
+    ReturnErrorOnFailure(BLEAdvertisingArbiter::InsertRequest(mAdvertisingRequest));
+#else
     ReturnErrorOnFailure(System::MapErrorZephyr(bt_le_adv_stop()));
     const bt_le_adv_param params = BT_LE_ADV_PARAM_INIT(mAdvertisingRequest.options, mAdvertisingRequest.minInterval,
                                                         mAdvertisingRequest.maxInterval, nullptr);
@@ -359,6 +383,7 @@ CHIP_ERROR BLEManagerImpl::StartAdvertisingProcess(void)
         bt_le_adv_start(&params, mAdvertisingRequest.advertisingData.data(), mAdvertisingRequest.advertisingData.size(),
                         mAdvertisingRequest.scanResponseData.data(), mAdvertisingRequest.scanResponseData.size())));
     ChipLogProgress(DeviceLayer, "CHIPoBLE advertising started");
+#endif
 
     // Transition to the Advertising state...
     if (!mFlags.Has(Flags::kAdvertising))
@@ -387,6 +412,9 @@ CHIP_ERROR BLEManagerImpl::StartAdvertisingProcess(void)
 
 CHIP_ERROR BLEManagerImpl::StopAdvertising()
 {
+#ifdef CONFIG_ATM_RADIO_HAL_MGR
+    BLEAdvertisingArbiter::CancelRequest(mAdvertisingRequest);
+#else
     if (ConnectivityMgr().IsThreadProvisioned())
     {
         ChipLogProgress(DeviceLayer, "Thread provisioned, StopAdvertising done");
@@ -395,6 +423,7 @@ CHIP_ERROR BLEManagerImpl::StopAdvertising()
     }
 
     ReturnErrorOnFailure(System::MapErrorZephyr(bt_le_adv_stop()));
+#endif
 
     // Transition to the not Advertising state...
     if (mFlags.Has(Flags::kAdvertising))
@@ -482,7 +511,9 @@ CHIP_ERROR BLEManagerImpl::HandleGAPConnect(const ChipDeviceEvent * event)
     mFlags.Set(Flags::kAdvertisingRefreshNeeded);
     PlatformMgr().ScheduleWork(DriveBLEState, 0);
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     mconId = connEvent->BtConn;
+#endif
     bt_conn_unref(connEvent->BtConn);
 
     return CHIP_NO_ERROR;
@@ -663,6 +694,7 @@ void BLEManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
         err = HandleTXCharComplete(event);
         break;
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     case DeviceEventType::kThreadStateChange:
         err = HandleThreadStateChange(event);
         break;
@@ -674,6 +706,7 @@ void BLEManagerImpl::_OnPlatformEvent(const ChipDeviceEvent * event)
     case DeviceEventType::kOperationalNetworkEnabled:
         err = HandleOperationalNetworkEnabled(event);
         break;
+#endif
 
     default:
         break;
@@ -915,6 +948,7 @@ ssize_t BLEManagerImpl::HandleC3Read(struct bt_conn * conId, const struct bt_gat
 }
 #endif
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
 CHIP_ERROR BLEManagerImpl::HandleOperationalNetworkEnabled(const ChipDeviceEvent * event)
 {
     ChipLogDetail(DeviceLayer, "HandleOperationalNetworkEnabled");
@@ -974,6 +1008,7 @@ void BLEManagerImpl::SwitchToIeee802154(void)
     ThreadStackMgrImpl().SetRadioBlocked(false);
     ThreadStackMgrImpl().SetThreadEnabled(true);
 }
+#endif
 
 } // namespace Internal
 } // namespace DeviceLayer

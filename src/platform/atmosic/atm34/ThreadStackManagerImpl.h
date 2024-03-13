@@ -59,9 +59,11 @@ class ThreadStackManagerImpl final : public ThreadStackManager,
 public:
     // ===== Methods that implement the ThreadStackManager abstract interface.
     CHIP_ERROR _InitThreadStack();
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     void SetRadioBlocked(bool state) { mRadioBlocked = state; }
     bool IsReadyToAttach(void) const { return mReadyToAttach; }
     void Finalize(void);
+#endif
 
 protected:
     // ===== Methods that implement the ThreadStackManager abstract interface.
@@ -74,9 +76,11 @@ protected:
     // ===== Methods that override the GenericThreadStackManagerImpl_OpenThread abstract interface.
 
     void _ProcessThreadActivity() {}
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     CHIP_ERROR _AttachToThreadNetwork(const Thread::OperationalDataset & dataset,
                                       NetworkCommissioning::Internal::WirelessDriver::ConnectCallback * callback);
     CHIP_ERROR _StartThreadScan(NetworkCommissioning::ThreadDriver::ScanCallback * callback);
+#endif
 
     //} // namespace Internal
 
@@ -89,10 +93,12 @@ private:
     static ThreadStackManagerImpl sInstance;
 
     // ===== Private members for use by this class only.
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     bool mRadioBlocked;
     bool mReadyToAttach;
 
     NetworkCommissioning::ThreadDriver::ScanCallback * mpScanCallback;
+#endif
 };
 
 /**

@@ -25,7 +25,9 @@
 
 #if CHIP_DEVICE_CONFIG_ENABLE_CHIPOBLE
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
 #include <platform/NetworkCommissioning.h>
+#endif
 #include <platform/Zephyr/BLEAdvertisingArbiter.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
@@ -38,7 +40,9 @@ namespace Internal {
 
 using namespace chip::Ble;
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
 class InternalScanCallback;
+#endif
 
 /**
  * Concrete implementation of the BLEManager singleton object for the Zephyr platforms.
@@ -104,12 +108,14 @@ private:
     bool mSubscribedConns[CONFIG_BT_MAX_CONN];
     bt_gatt_indicate_params mIndicateParams[CONFIG_BT_MAX_CONN];
     bt_conn_cb mConnCallbacks;
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     bt_conn * mconId;
+    bool mBLERadioInitialized;
+#endif
     BLEAdvertisingArbiter::Request mAdvertisingRequest = {};
 #if CHIP_ENABLE_ADDITIONAL_DATA_ADVERTISING
     PacketBufferHandle c3CharDataBufferHandle;
 #endif
-    bool mBLERadioInitialized;
 
     void DriveBLEState(void);
     CHIP_ERROR PrepareAdvertisingRequest();
@@ -121,10 +127,12 @@ private:
     CHIP_ERROR HandleTXCharCCCDWrite(const ChipDeviceEvent * event);
     CHIP_ERROR HandleTXCharComplete(const ChipDeviceEvent * event);
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     CHIP_ERROR HandleBleConnectionClosed(const ChipDeviceEvent * event);
     CHIP_ERROR HandleThreadStateChange(const ChipDeviceEvent * event);
     CHIP_ERROR HandleOperationalNetworkEnabled(const ChipDeviceEvent * event);
     InternalScanCallback * mInternalScanCallback;
+#endif
 
 #if CHIP_ENABLE_ADDITIONAL_DATA_ADVERTISING
     CHIP_ERROR PrepareC3CharData();
@@ -159,10 +167,13 @@ public:
     static ssize_t HandleC3Read(struct bt_conn * conn, const struct bt_gatt_attr * attr, void * buf, uint16_t len, uint16_t offset);
 #endif
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
     void SwitchToIeee802154(void);
     CHIP_ERROR StartAdvertisingProcess(void);
+#endif
 };
 
+#ifndef CONFIG_ATM_RADIO_HAL_MGR
 class InternalScanCallback : public DeviceLayer::NetworkCommissioning::ThreadDriver::ScanCallback
 {
 public:
@@ -176,6 +187,7 @@ public:
 private:
     BLEManagerImpl * mBLEManagerImpl;
 };
+#endif
 
 /**
  * Returns a reference to the public interface of the BLEManager singleton object.
