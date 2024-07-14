@@ -28,6 +28,7 @@ ALL_PLATFORMS = set([
     'ameba',
     'android',
     'asr',
+    'atmosic',
     'bl602',
     'bouffalolab',
     'cc13xx_26xx',
