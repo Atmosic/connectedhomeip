@@ -1,1 +1,92 @@
-../../Zephyr/CHIPPlatformConfig.h
+/*
+ *
+ *    Copyright (c) 2020-2022 Project CHIP Authors
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *        http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ */
+
+/**
+ *    @file
+ *          Platform-specific configuration overrides for CHIP on
+ *          ATM34 platform.
+ */
+
+#pragma once
+
+#include <platform/Zephyr/CHIPPlatformConfig.h>
+
+#ifdef CONFIG_CHIP_LOG_SIZE_OPTIMIZATION
+// Disable some of the too detailed log modules to save flash
+#define CHIP_CONFIG_LOG_MODULE_ExchangeManager_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_Crypto_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_Crypto_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_BDX_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_BDX_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_EventLogging_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_EventLogging_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_SetupPayload_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_SetupPayload_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_CASESessionManager_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_CASESessionManager_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_DataManagement_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_FabricProvisioning_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_chipSystemLayer_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_chipSystemLayer_PROGRESS 0
+#define CHIP_CONFIG_LOG_MODULE_Zcl_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_SecureChannel_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_Ble_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_AppServer_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_Support_DETAIL 0
+#define CHIP_CONFIG_LOG_MODULE_Support_PROGRESS 0
+#endif
+
+// Set MRP retry intervals for Thread and Wi-Fi to test-proven values.
+#ifndef CHIP_CONFIG_MRP_LOCAL_ACTIVE_RETRY_INTERVAL
+#if CHIP_ENABLE_OPENTHREAD
+#define CHIP_CONFIG_MRP_LOCAL_ACTIVE_RETRY_INTERVAL (800_ms32)
+#else
+#define CHIP_CONFIG_MRP_LOCAL_ACTIVE_RETRY_INTERVAL (1000_ms32)
+#endif // CHIP_ENABLE_OPENTHREAD
+#endif // CHIP_CONFIG_MRP_LOCAL_ACTIVE_RETRY_INTERVAL
+
+#ifndef CHIP_CONFIG_MRP_LOCAL_IDLE_RETRY_INTERVAL
+#if CHIP_ENABLE_OPENTHREAD
+#define CHIP_CONFIG_MRP_LOCAL_IDLE_RETRY_INTERVAL (800_ms32)
+#else
+#define CHIP_CONFIG_MRP_LOCAL_IDLE_RETRY_INTERVAL (1000_ms32)
+#endif // CHIP_ENABLE_OPENTHREAD
+#endif // CHIP_CONFIG_MRP_LOCAL_IDLE_RETRY_INTERVAL
+
+#ifndef CHIP_CONFIG_ICD_IDLE_MODE_DURATION_SEC
+#ifdef CONFIG_CHIP_ICD_IDLE_MODE_INTERVAL
+#define CHIP_CONFIG_ICD_IDLE_MODE_DURATION_SEC CONFIG_CHIP_ICD_IDLE_MODE_INTERVAL
+#endif // CONFIG_CHIP_ICD_IDLE_MODE_INTERVAL
+#endif // CHIP_CONFIG_ICD_IDLE_MODE_DURATION_SEC
+
+#ifndef CHIP_CONFIG_ICD_ACTIVE_MODE_DURATION_MS
+#ifdef CONFIG_CHIP_ICD_ACTIVE_MODE_INTERVAL
+#define CHIP_CONFIG_ICD_ACTIVE_MODE_DURATION_MS CONFIG_CHIP_ICD_ACTIVE_MODE_INTERVAL
+#endif // CONFIG_CHIP_ICD_ACTIVE_MODE_INTERVAL
+#endif // CHIP_CONFIG_ICD_ACTIVE_MODE_DURATION_MS
+
+#ifndef CHIP_CONFIG_ICD_ACTIVE_MODE_THRESHOLD_MS
+#ifdef CONFIG_CHIP_ICD_ACTIVE_MODE_THRESHOLD
+#define CHIP_CONFIG_ICD_ACTIVE_MODE_THRESHOLD_MS CONFIG_CHIP_ICD_ACTIVE_MODE_THRESHOLD
+#endif // CONFIG_CHIP_ICD_ACTIVE_MODE_THRESHOLD
+#endif // CHIP_CONFIG_ICD_ACTIVE_MODE_THRESHOLD_MS
+
+#ifndef CHIP_CONFIG_ICD_CLIENTS_SUPPORTED_PER_FABRIC
+#ifdef CONFIG_CHIP_ICD_CLIENTS_PER_FABRIC
+#define CHIP_CONFIG_ICD_CLIENTS_SUPPORTED_PER_FABRIC CONFIG_CHIP_ICD_CLIENTS_PER_FABRIC
+#endif // CONFIG_CHIP_ICD_CLIENTS_PER_FABRIC
+#endif // CHIP_CONFIG_ICD_CLIENTS_SUPPORTED_PER_FABRIC
