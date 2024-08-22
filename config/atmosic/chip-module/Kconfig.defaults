@@ -179,6 +179,13 @@ config CHIP_OTA_REQUESTOR
 config CHIP_EXTENDED_DISCOVERY
     default n
 
+if CHIP_ENABLE_ICD_SUPPORT
+
+config CHIP_ICD_SLOW_POLL_INTERVAL
+	default 5000
+
+endif
+
 # 22528 is for the heap of controller
 config CHIP_MALLOC_SYS_HEAP_SIZE
     default 34816
