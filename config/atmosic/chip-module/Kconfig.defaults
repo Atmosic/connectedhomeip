@@ -254,6 +254,12 @@ config OPENTHREAD_DEFAULT_TX_POWER
 config OPENTHREAD_SLAAC
 	default y
 
+config OPENTHREAD_DUA
+	default y if !OPENTHREAD_THREAD_VERSION_1_1
+
+config OPENTHREAD_MLR
+	default y if !OPENTHREAD_THREAD_VERSION_1_1
+
 # SoC series related configuration
 
 
