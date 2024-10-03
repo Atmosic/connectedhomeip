@@ -35,8 +35,6 @@ static_library("atm34") {
     "ConfigurationManagerImpl.h",
     "../../Zephyr/ConnectivityManagerImpl.cpp",
     "ConnectivityManagerImpl.h",
-    "DeviceInstanceInfoProviderImpl.cpp",
-    "DeviceInstanceInfoProviderImpl.h",
     "../../Zephyr/DiagnosticDataProviderImpl.cpp",
     "../../Zephyr/DiagnosticDataProviderImplGetter.cpp",
     "DiagnosticDataProviderImpl.h",
@@ -53,8 +51,28 @@ static_library("atm34") {
     "ZephyrConfig.h",
   ]
 
+  public = [
+    "${chip_root}/src/credentials/CHIPCert.h",
+    "${chip_root}/src/credentials/CertificationDeclaration.h",
+    "${chip_root}/src/credentials/DeviceAttestationCredsProvider.h",
+  ]
+
   public_deps = [ "${chip_root}/src/platform:platform_base" ]
   deps = [ "${chip_root}/src/platform/logging:headers" ]
+
+  if (chip_enable_factory_data) {
+    sources += [
+      "FactoryDataParser.c",
+      "FactoryDataParser.h",
+      "FactoryDataProvider.cpp",
+      "FactoryDataProvider.h",
+    ]
+  } else {
+    sources += [
+      "DeviceInstanceInfoProviderImpl.cpp",
+      "DeviceInstanceInfoProviderImpl.h",
+    ]
+  }
 
   if (chip_enable_openthread) {
     sources += [

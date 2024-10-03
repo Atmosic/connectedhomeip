@@ -24,9 +24,9 @@
 #include <platform/CHIPDeviceLayer.h>
 
 #if CONFIG_CHIP_FACTORY_DATA
-#include <platform/nrfconnect/FactoryDataProvider.h>
+#include <platform/atmosic/atm34/FactoryDataProvider.h>
 #else
-#include <platform/nrfconnect/DeviceInstanceInfoProviderImpl.h>
+#include <platform/atmosic/atm34/DeviceInstanceInfoProviderImpl.h>
 #endif
 
 #ifdef CONFIG_MCUMGR_TRANSPORT_BT
@@ -91,6 +91,6 @@ private:
     FunctionEvent mFunction = FunctionEvent::NoneSelected;
 
 #if CONFIG_CHIP_FACTORY_DATA
-    chip::DeviceLayer::FactoryDataProvider<chip::DeviceLayer::InternalFlashFactoryData> mFactoryDataProvider;
+    chip::DeviceLayer::FactoryDataProvider<chip::DeviceLayer::RRAMFactoryData> mFactoryDataProvider;
 #endif
 };

@@ -209,8 +209,8 @@ CHIP_ERROR AppTask::Init()
     SetCommissionableDataProvider(&mFactoryDataProvider);
     // Read EnableKey from the factory data.
     MutableByteSpan enableKey(sTestEventTriggerEnableKey);
-    err = mFactoryDataProvider.GetEnableKey(enableKey);
-    if (err != CHIP_NO_ERROR)
+    CHIP_ERROR fac_err = mFactoryDataProvider.GetEnableKey(enableKey);
+    if (fac_err != CHIP_NO_ERROR)
     {
         LOG_ERR("mFactoryDataProvider.GetEnableKey() failed. Could not delegate a test event trigger");
         memset(sTestEventTriggerEnableKey, 0, sizeof(sTestEventTriggerEnableKey));
