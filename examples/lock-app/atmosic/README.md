@@ -1,35 +1,27 @@
-# Matter nRF Connect Lock Example Application
+# Atmosic Matter Lock Example Application
 
-The nRF Connect Lock Example demonstrates how to remotely control a door lock
+The Atmosic Lock Example demonstrates how to remotely control a door lock
 device with one basic bolt. It uses buttons to test changing the lock and device
 states and LEDs to show the state of these changes. You can use this example as
 a reference for creating your own application.
 
-<img src="../../platform/nrfconnect/doc/images/Logo_RGB_H-small.png" alt="Nordic Semiconductor logo"/>
-<img src="../../platform/nrfconnect/doc/images/nRF52840-DK-small.png" alt="nRF52840 DK">
-
 The example is based on
-[Matter](https://github.com/project-chip/connectedhomeip) and Nordic
-Semiconductor's nRF Connect SDK, and was created to facilitate testing and
+[Matter](https://github.com/project-chip/connectedhomeip) and Atmosic
+Technologies' OpenAir SDK, and was created to facilitate testing and
 certification of a Matter device communicating over a low-power, 802.15.4 Thread
-network, or Wi-Fi network.
+network.
 
 The example behaves as a Matter accessory, that is a device that can be paired
 into an existing Matter network and can be controlled by this network. In the
-case of Thread, this device works as a Thread Sleepy End Device. Support for
-both Thread and Wi-Fi is mutually exclusive and depends on the hardware
-platform, so only one protocol can be supported for a specific lock device.
+case of Thread, this device works as a Thread Sleepy End Device.
 
 <hr>
 
 ## Overview
 
-This example is running on the nRF Connect platform, which is based on Nordic
-Semiconductor's
-[nRF Connect SDK](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/index.html)
-and [Zephyr RTOS](https://zephyrproject.org/). Visit Matter's
-[nRF Connect platform overview](../../../docs/guides/nrfconnect_platform_overview.md)
-to read more about the platform structure and dependencies.
+This example is running on Atmosic Technologies'
+[OpenAir](https://github.com/Atmosic/openair)
+and [Zephyr RTOS](https://zephyrproject.org/).
 
 By default, the Matter accessory device has IPv6 networking disabled. You must
 pair it with the Matter controller over Bluetooth® LE to get the configuration
@@ -42,9 +34,9 @@ device and provision the device into the network.
 The sample uses buttons for changing the lock and device states, and LEDs to
 show the state of these changes. You can test it in the following ways:
 
--   Standalone, using a single DK that runs the door lock application.
+-   Standalone, using a single EVK that runs the door lock application.
 
--   Remotely over the Thread or the Wi-Fi protocol, which in either case
+-   Remotely over the Thread protocol, which
     requires more devices, including a Matter controller that you can configure
     either on a PC or a mobile device.
 
@@ -54,9 +46,7 @@ In this example, to commission the device onto a Matter network, it must be
 discoverable over Bluetooth LE. For security reasons, you must start Bluetooth
 LE advertising manually after powering up the device by pressing:
 
--   On nRF52840 DK, nRF5340 DK, and nRF21540 DK: **Button 4**.
-
--   On nRF7002 DK: **Button 2**.
+-   On ATMEVK-3425 and ATMEVK-3430e: **Button 2**.
 
 ### Bluetooth LE rendezvous
 
@@ -65,80 +55,21 @@ Matter device and the Matter controller, where the controller has the
 commissioner role.
 
 To start the rendezvous, the controller must get the commissioning information
-from the Matter device. The data payload is encoded within a QR code, printed to
-the UART console, and shared using an NFC tag. The emulation of the NFC tag
-emulation starts automatically when Bluetooth LE advertising is started and
-stays enabled until Bluetooth LE advertising timeout expires.
+from the Matter device. The data payload is encoded within a QR code and printed to
+the UART console.
 
-#### Thread or Wi-Fi provisioning
+#### Thread provisioning
 
 The provisioning operation, which is the Last part of the rendezvous procedure,
-involves sending the Thread or Wi-Fi network credentials from the Matter
-controller to the Matter device. As a result, the device joins the Thread or
-Wi-Fi network and can communicate with other devices in the network.
-
-### Device Firmware Upgrade
-
-The example supports over-the-air (OTA) device firmware upgrade (DFU) using one
-of the two available methods:
-
--   Matter OTA update that is mandatory for Matter-compliant devices and enabled
-    by default
--   [Simple Management Protocol](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/zephyr/guides/device_mgmt/index.html#device-mgmt)
-    over Bluetooth LE, an optional proprietary method that can be enabled to
-    work alongside the default Matter OTA update. Note that this protocol is not
-    a part of the Matter specification.
-
-For both methods, the
-[MCUboot](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/mcuboot/index.html)
-bootloader solution is used to replace the old firmware image with the new one.
-
-#### Matter Over-the-Air Update
-
-The Matter over-the-air update distinguishes two types of nodes: OTA Provider
-and OTA Requestor.
-
-An OTA Provider is a node that hosts a new firmware image and is able to respond
-on an OTA Requestor's queries regarding availability of new firmware images or
-requests to start sending the update packages.
-
-An OTA Requestor is a node that wants to download a new firmware image and sends
-requests to an OTA Provider to start the update process.
-
-#### Simple Management Protocol
-
-Simple Management Protocol (SMP) is a basic transfer encoding that is used for
-device management purposes, including application image management. SMP supports
-using different transports, such as Bluetooth LE, UDP, or serial USB/UART.
-
-In this example, the Matter device runs the SMP Server to download the
-application update image using the Bluetooth LE transport.
-
-See the
-[Building with Device Firmware Upgrade support](#building-with-device-firmware-upgrade-support)
-section to learn how to enable SMP and use it for the DFU purpose in this
-example.
-
-#### Bootloader
-
-MCUboot is a secure bootloader used for swapping firmware images of different
-versions and generating proper build output files that can be used in the device
-firmware upgrade process.
-
-The bootloader solution requires an area of flash memory to swap application
-images during the firmware upgrade. Nordic Semiconductor devices use an external
-memory chip for this purpose. The memory chip communicates with the
-microcontroller through the QSPI bus.
-
-See the
-[Building with Device Firmware Upgrade support](#building-with-device-firmware-upgrade-support)
-section to learn how to change MCUboot and flash configuration in this example.
+involves sending the Thread network credentials from the Matter
+controller to the Matter device. As a result, the device joins the Thread
+network and can communicate with other devices in the network.
 
 <hr>
 
 ## Requirements
 
-The application requires a specific revision of the nRF Connect SDK to work
+The application requires a specific revision of the OpenAir SDK to work
 correctly. See [Setting up the environment](#setting-up-the-environment) for
 more information.
 
@@ -148,20 +79,13 @@ The example supports building and running on the following devices:
 
 | Hardware platform                                                                         | Build target               | Platform image                                                                                                                                   |
 | ----------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [nRF52840 DK](https://www.nordicsemi.com/Software-and-Tools/Development-Kits/nRF52840-DK) | `nrf52840dk_nrf52840`      | <details><summary>nRF52840 DK</summary><img src="../../platform/nrfconnect/doc/images/nRF52840_DK_info-medium.jpg" alt="nRF52840 DK"/></details> |
-| [nRF5340 DK](https://www.nordicsemi.com/Software-and-Tools/Development-Kits/nRF5340-DK)   | `nrf5340dk_nrf5340_cpuapp` | <details><summary>nRF5340 DK</summary><img src="../../platform/nrfconnect/doc/images/nRF5340_DK_info-medium.jpg" alt="nRF5340 DK"/></details>    |
-| [nRF7002 DK](https://www.nordicsemi.com/Products/Development-hardware/nRF7002-DK)         | `nrf7002dk_nrf5340_cpuapp` | <details><summary>nRF7002 DK</summary><img src="../../platform/nrfconnect/doc/images/nRF7002-DK_Front-small.png" alt="nRF7002 DK"/></details>    |
+| [ATMEVK-3425](https://atmosic.com/support_developer_kits/)                                | `ATMEVK-3425-PQK-2`        | <details><summary>ATMEVK-3425</summary></details>                                                                                                |
+| [ATMEVK-3430e](https://atmosic.com/support_developer_kits/)                               | `ATMEVK-3430e-WQN-2`       | <details><summary>ATMEVK-3430e</summary></details>                                                                                               |
+
+For all EVKs, JP25 and JP27 need to be installed in order to enable the
+buttons and the LEDs.
 
 <hr>
-
-### IPv6 network support
-
-The development kits for this sample offer the following IPv6 network support
-for Matter:
-
--   Matter over Thread is supported for `nrf52840dk_nrf52840` and
-    `nrf5340dk_nrf5340_cpuapp`.
--   Matter over Wi-Fi is supported for `nrf7002dk_nrf5340_cpuapp`.
 
 ## Device UI
 
@@ -169,7 +93,11 @@ This section lists the User Interface elements that you can use to control and
 monitor the state of the device. These correspond to PCB components on the
 platform image.
 
-**LED 1** shows the overall state of the device and its connectivity. The
+### LEDs
+
+This section describes all behaviors of LEDs located on platform image.
+
+**LED 1 - Red** shows the overall state of the device and its connectivity. The
 following states are possible:
 
 -   _Short Flash On (50 ms on/950 ms off)_ &mdash; The device is in the
@@ -181,13 +109,13 @@ following states are possible:
     Bluetooth LE.
 
 -   _Short Flash Off (950ms on/50ms off)_ &mdash; The device is fully
-    provisioned, but does not yet have full connectivity for Thread or Wi-Fi
+    provisioned, but does not yet have full connectivity for Thread
     network.
 
 -   _Solid On_ &mdash; The device is fully provisioned.
 
-**LED 2** simulates the lock bolt and shows the state of the lock. The following
-states are possible:
+**LED 2 - Yellow** simulates the lock bolt and shows the state of the lock.
+The following states are possible:
 
 -   _Solid On_ &mdash; The bolt is extended and the door is locked.
 
@@ -199,6 +127,13 @@ states are possible:
     Additionally, the LED starts blinking evenly (500 ms on/500 ms off) when the
     Identify command of the Identify cluster is received on the endpoint 1. The
     command’s argument can be used to specify the duration of the effect.
+
+**LED 3 - Blue** blinks when the factory reset procedure is initiated.
+
+### Buttons
+
+This section describes a reaction to pressing or holding buttons located on the
+platform image.
 
 **Button 1** can be used for the following purposes:
 
@@ -215,131 +150,25 @@ states are possible:
 **Button 2** &mdash; Pressing the button once changes the lock state to the
 opposite one.
 
--   On nRF52840 DK, nRF5340 DK, and nRF21540 DK: Changes the lock state to the
-    opposite one.
-
--   On nRF7002 DK:
+-   On ATMEVK-3425 and ATMEVK-3430e:
 
     -   If pressed for less than three seconds, it changes the lock state to the
         opposite one.
 
-    -   If pressed for more than three seconds, it starts the NFC tag emulation,
+    -   If pressed for more than three seconds, it
         enables Bluetooth LE advertising for the predefined period of time (15
         minutes by default), and makes the device discoverable over Bluetooth
         LE.
-
-**Button 4**:
-
--   On nRF52840 DK, nRF5340 DK, and nRF21540 DK: Starts the NFC tag emulation,
-    enables Bluetooth LE advertising for the predefined period of time (15
-    minutes by default), and makes the device discoverable over Bluetooth LE.
-    This button is used during the commissioning procedure.
-
--   On nRF7002 DK: Not available.
 
 **SEGGER J-Link USB port** can be used to get logs from the device or
 communicate with it using the
 [command line interface](../../../docs/guides/nrfconnect_examples_cli.md).
 
-**NFC port with antenna attached** can be used to start the
-[rendezvous](#bluetooth-le-rendezvous) by providing the commissioning
-information from the Matter device in a data payload that can be shared using
-NFC.
-
 <hr>
 
 ## Setting up the environment
 
-Before building the example, check out the Matter repository and sync submodules
-using the following command:
-
-        $ git submodule update --init
-
-The example requires a specific revision of the nRF Connect SDK. You can either
-install it along with the related tools directly on your system or use a Docker
-image that has the tools pre-installed.
-
-If you are a macOS user, you won't be able to use the Docker container to flash
-the application onto a Nordic development kit due to
-[certain limitations of Docker for macOS](https://docs.docker.com/docker-for-mac/faqs/#can-i-pass-through-a-usb-device-to-a-container).
-Use the [native shell](#using-native-shell-for-setup) for building instead.
-
-### Using Docker container for setup
-
-To use the Docker container for setup, complete the following steps:
-
-1.  If you do not have the nRF Connect SDK installed yet, create a directory for
-    it by running the following command:
-
-        $ mkdir ~/nrfconnect
-
-2.  Download the latest version of the nRF Connect SDK Docker image by running
-    the following command:
-
-        $ docker pull nordicsemi/nrfconnect-chip
-
-3.  Start Docker with the downloaded image by running the following command,
-    customized to your needs as described below:
-
-         $ docker run --rm -it -e RUNAS=$(id -u) -v ~/nrfconnect:/var/ncs -v ~/connectedhomeip:/var/chip \
-             -v /dev/bus/usb:/dev/bus/usb --device-cgroup-rule "c 189:* rmw" nordicsemi/nrfconnect-chip
-
-    In this command:
-
-    -   _~/nrfconnect_ can be replaced with an absolute path to the nRF Connect
-        SDK source directory.
-    -   _~/connectedhomeip_ must be replaced with an absolute path to the CHIP
-        source directory.
-    -   _-v /dev/bus/usb:/dev/bus/usb --device-cgroup-rule "c 189:_ rmw"\*
-        parameters can be omitted if you are not planning to flash the example
-        onto hardware. These parameters give the container access to USB devices
-        connected to your computer such as the nRF52840 DK.
-    -   _--rm_ can be omitted if you do not want the container to be
-        auto-removed when you exit the container shell session.
-    -   _-e RUNAS=\$(id -u)_ is needed to start the container session as the
-        current user instead of root.
-
-4.  Update the nRF Connect SDK to the most recent supported revision, by running
-    the following command:
-
-         $ cd /var/chip
-         $ python3 scripts/setup/nrfconnect/update_ncs.py --update
-
-Now you can proceed with the [Building](#building) instruction.
-
-### Using native shell for setup
-
-To use the native shell for setup, complete the following steps:
-
-1.  Download and install the following additional software:
-
-    -   [nRF Command Line Tools](https://www.nordicsemi.com/Software-and-Tools/Development-Tools/nRF-Command-Line-Tools)
-    -   [GN meta-build system](https://gn.googlesource.com/gn/)
-
-2.  If you do not have the nRF Connect SDK installed, follow the
-    [guide](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/gs_assistant.html#)
-    in the nRF Connect SDK documentation to install the latest stable nRF
-    Connect SDK version. Since command-line tools will be used for building the
-    example, installing SEGGER Embedded Studio is not required.
-
-    If you have the SDK already installed, continue to the next step and update
-    the nRF Connect SDK after initializing environment variables.
-
-3.  Initialize environment variables referred to by the CHIP and the nRF Connect
-    SDK build scripts. Replace _nrfconnect-dir_ with the path to your nRF
-    Connect SDK installation directory, and _toolchain-dir_ with the path to GNU
-    Arm Embedded Toolchain.
-
-         $ source nrfconnect-dir/zephyr/zephyr-env.sh
-         $ export ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb
-         $ export GNUARMEMB_TOOLCHAIN_PATH=toolchain-dir
-
-4.  Update the nRF Connect SDK to the most recent supported revision by running
-    the following command (replace _matter-dir_ with the path to Matter
-    repository directory):
-
-         $ cd matter-dir
-         $ python3 scripts/setup/nrfconnect/update_ncs.py --update
+FIXME
 
 Now you can proceed with the [Building](#building) instruction.
 
@@ -352,11 +181,11 @@ environment:
 
 1.  Navigate to the example's directory:
 
-        $ cd examples/lock-app/nrfconnect
+        $ cd examples/lock-app/atmosic
 
 2.  Run the following command to build the example, with _build-target_ replaced
-    with the build target name of the Nordic Semiconductor's kit you own, for
-    example `nrf52840dk_nrf52840`:
+    with the build target name of the Atmosic Technologies' kit you own, for
+    example `ATMEVK-3430e-WQN-2`:
 
          $ west build -b build-target
 
@@ -380,56 +209,8 @@ features like logs and command-line interface, run the following command:
 
     $ west build -b build-target -- -DCONF_FILE=prj_release.conf
 
-Remember to replace _build-target_ with the build target name of the Nordic
-Semiconductor's kit you own.
-
-### Building with Device Firmware Upgrade support
-
-Support for DFU using Matter OTA is enabled by default.
-
-To enable DFU over Bluetooth LE, run the following command with _build-target_
-replaced with the build target name of the Nordic Semiconductor kit you are
-using (for example `nrf52840dk_nrf52840`):
-
-    $ west build -b build-target -- -DCONFIG_CHIP_DFU_OVER_BT_SMP=y
-
-To completely disable support for both DFU methods, run the following command
-with _build-target_ replaced with the build target name of the Nordic
-Semiconductor kit you are using (for example `nrf52840dk_nrf52840`):
-
-    $ west build -b build-target -- -DCONF_FILE=prj_no_dfu.conf
-
-> **Note**:
->
-> There are two types of Device Firmware Upgrade modes: single-image DFU and
-> multi-image DFU. Single-image mode supports upgrading only one firmware image,
-> the application image, and should be used for single-core nRF52840 DK devices.
-> Multi-image mode allows to upgrade more firmware images and is suitable for
-> upgrading the application core and network core firmware in two-core nRF5340
-> DK devices.
-
-#### Changing bootloader configuration
-
-To change the default MCUboot configuration, edit the `prj.conf` file located in
-the `child_image/mcuboot` directory.
-
-Make sure to keep the configuration consistent with changes made to the
-application configuration. This is necessary for the configuration to work, as
-the bootloader image is a separate application from the user application and it
-has its own configuration file.
-
-#### Changing flash memory settings
-
-In the default configuration, the MCUboot uses the
-[Partition Manager](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/scripts/partition_manager/partition_manager.html#partition-manager)
-to configure flash partitions used for the bootloader application image slot
-purposes. You can change these settings by defining
-[static partitions](https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/scripts/partition_manager/partition_manager.html#ug-pm-static).
-This example uses this option to define using an external flash.
-
-To modify the flash settings of your board (that is, your _build-target_, for
-example `nrf52840dk_nrf52840`), edit the `pm_static_dfu.yml` file located in the
-`configuration/build-target/` directory.
+Remember to replace _build-target_ with the build target name of the Atmosic
+Technologies' kit you own.
 
 <hr>
 
@@ -443,8 +224,8 @@ directory:
 
     $ west build -b build-target -t menuconfig
 
-Remember to replace _build-target_ with the build target name of the Nordic
-Semiconductor's kit you own.
+Remember to replace _build-target_ with the build target name of the Atmosic
+Technologies' kit you own.
 
 Changes done with menuconfig will be lost if the `build` directory is deleted.
 To make them persistent, save the configuration options in the `prj.conf` file.
@@ -471,9 +252,6 @@ depending on the selected board:
     command-line shell.
 -   release -- Release version of the application - can be used to enable only
     the necessary application functionalities to optimize its performance.
--   no_dfu -- Debug version of the application without Device Firmware Upgrade
-    feature support - can be used only for the nRF52840 DK and nRF5340 DK, as
-    those platforms have DFU enabled by default.
 
 For more information, see the
 [Configuring nRF Connect SDK examples](../../../docs/guides/nrfconnect_examples_configuration.md)
@@ -517,9 +295,3 @@ Read the
 to see how to use [CHIPTool](../../../examples/android/CHIPTool/README.md) for
 Android smartphones to commission and control the application within a
 Matter-enabled Thread or Wi-Fi network.
-
-### Testing Device Firmware Upgrade
-
-Read the
-[DFU tutorial](../../../docs/guides/nrfconnect_examples_software_update.md) to
-see how to upgrade your device firmware.
