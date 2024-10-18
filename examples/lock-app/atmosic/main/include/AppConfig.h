@@ -23,17 +23,8 @@
 // ---- Lock Example App Config ----
 
 #define FUNCTION_BUTTON 0
-
-#if NUMBER_OF_BUTTONS == 2
 #define BLE_ADVERTISEMENT_START_AND_LOCK_BUTTON 1
-#else
-#define LOCK_BUTTON 1
-#define BLE_ADVERTISEMENT_START_BUTTON 3
-#endif
 
 #define SYSTEM_STATE_LED 0
 #define LOCK_STATE_LED 1
-#if NUMBER_OF_LEDS == 4
 #define FACTORY_RESET_SIGNAL_LED 2
-#define FACTORY_RESET_SIGNAL_LED1 3
-#endif

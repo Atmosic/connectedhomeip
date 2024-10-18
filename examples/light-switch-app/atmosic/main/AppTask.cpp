@@ -76,9 +76,7 @@ uint8_t sTestEventTriggerEnableKey[TestEventTriggerDelegate::kEnableKeyLength] =
 
 LEDWidget sStatusLED;
 LEDWidget sIdentifyLED;
-#if NUMBER_OF_LEDS == 4
-FactoryResetLEDsWrapper<2> sFactoryResetLEDs{ { FACTORY_RESET_SIGNAL_LED, FACTORY_RESET_SIGNAL_LED1 } };
-#endif
+LEDWidget sFactoryResetLED;
 
 #define BUTTON_SPEC(n) GPIO_DT_SPEC_GET(n, gpios),
 
@@ -126,6 +124,7 @@ CHIP_ERROR AppTask::Init()
 
     sStatusLED.Init(SYSTEM_STATE_LED);
     sIdentifyLED.Init(IDENTIFY_LED);
+    sFactoryResetLED.Init(FACTORY_RESET_SIGNAL_LED);
     UpdateStatusLED();
 
     // Initialize buttons
@@ -318,6 +317,8 @@ void AppTask::ButtonReleaseHandler(const AppEvent & event)
             }
             else if (Instance().mFunction == FunctionEvent::FactoryReset)
             {
+                sIdentifyLED.Set(false);
+                sFactoryResetLED.Set(false);
                 UpdateStatusLED();
 
                 Instance().CancelTimer(Timer::Function);
@@ -372,15 +373,11 @@ void AppTask::TimerEventHandler(const AppEvent & event)
                 // reset all LEDs to synchronize factory reset blinking
                 sStatusLED.Set(false);
                 sIdentifyLED.Set(false);
-#if NUMBER_OF_LEDS == 4
-                sFactoryResetLEDs.Set(false);
-#endif
+                sFactoryResetLED.Set(false);
 
                 sStatusLED.Blink(LedConsts::kBlinkRate_ms);
                 sIdentifyLED.Blink(LedConsts::kBlinkRate_ms);
-#if NUMBER_OF_LEDS == 4
-                sFactoryResetLEDs.Blink(LedConsts::kBlinkRate_ms);
-#endif
+                sFactoryResetLED.Blink(LedConsts::kBlinkRate_ms);
 #endif
             }
             else if (Instance().mFunction == FunctionEvent::FactoryReset)
@@ -447,24 +444,6 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
     switch (event->Type)
     {
     case DeviceEventType::kCHIPoBLEAdvertisingChange:
-        UpdateStatusLED();
-#ifdef CONFIG_CHIP_NFC_COMMISSIONING
-        if (event->CHIPoBLEAdvertisingChange.Result == kActivity_Started)
-        {
-            if (NFCMgr().IsTagEmulationStarted())
-            {
-                LOG_INF("NFC Tag emulation is already started");
-            }
-            else
-            {
-                ShareQRCodeOverNFC(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
-            }
-        }
-        else if (event->CHIPoBLEAdvertisingChange.Result == kActivity_Stopped)
-        {
-            NFCMgr().StopTagEmulation();
-        }
-#endif
         sHaveBLEConnections = ConnectivityMgr().NumBLEConnections() != 0;
         UpdateStatusLED();
         break;
@@ -488,10 +467,6 @@ void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */
 void AppTask::UpdateStatusLED()
 {
 #ifdef CONFIG_STATE_LEDS
-#if NUMBER_OF_LEDS == 4
-    sFactoryResetLEDs.Set(false);
-#endif
-
     // Update the status LED.
     //
     // If IPv6 network and service provisioned, keep the LED on constantly.

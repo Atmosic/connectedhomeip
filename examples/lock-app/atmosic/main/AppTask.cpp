@@ -59,9 +59,7 @@ constexpr uint32_t kFactoryResetTriggerTimeout      = 3000;
 constexpr uint32_t kFactoryResetCancelWindowTimeout = 3000;
 constexpr size_t kAppEventQueueSize                 = 10;
 constexpr EndpointId kLockEndpointId                = 1;
-#if NUMBER_OF_BUTTONS == 2
 constexpr uint32_t kAdvertisingTriggerTimeout = 3000;
-#endif
 
 #if CONFIG_CHIP_FACTORY_DATA || CONFIG_CHIP_OTA_REQUESTOR
 // NOTE! This key is for test/certification only and should not be available in production devices!
@@ -78,9 +76,7 @@ Identify sIdentify = { kLockEndpointId, AppTask::IdentifyStartHandler, AppTask::
 
 LEDWidget sStatusLED;
 LEDWidget sLockLED;
-#if NUMBER_OF_LEDS == 4
-FactoryResetLEDsWrapper<2> sFactoryResetLEDs{ { FACTORY_RESET_SIGNAL_LED, FACTORY_RESET_SIGNAL_LED1 } };
-#endif
+LEDWidget sFactoryResetLED;
 
 #define BUTTON_SPEC(n) GPIO_DT_SPEC_GET(n, gpios),
 
@@ -121,7 +117,7 @@ CHIP_ERROR AppTask::Init()
     sStatusLED.Init(SYSTEM_STATE_LED);
     sLockLED.Init(LOCK_STATE_LED);
     sLockLED.Set(BoltLockMgr().IsLocked());
-
+    sFactoryResetLED.Init(FACTORY_RESET_SIGNAL_LED);
     UpdateStatusLED();
 
     // Initialize buttons
@@ -153,38 +149,11 @@ CHIP_ERROR AppTask::Init()
         LOG_ERR("gpio_add_callback(1) failed %d", ret);
         return CHIP_ERROR_INTERNAL;
     }
-#if NUMBER_OF_BUTTONS == 2
     ret = gpio_pin_interrupt_configure_dt(&buttons[1], GPIO_INT_EDGE_BOTH);
     if (ret) {
         LOG_ERR("gpio_pin_interrupt_configure_dt(1) failed %d", ret);
         return CHIP_ERROR_INTERNAL;
     }
-#else
-    ret = gpio_pin_interrupt_configure_dt(&buttons[1], GPIO_INT_EDGE_TO_ACTIVE);
-    if (ret) {
-        LOG_ERR("gpio_pin_interrupt_configure_dt(1) failed %d", ret);
-        return CHIP_ERROR_INTERNAL;
-    }
-#endif
-
-#if NUMBER_OF_BUTTONS != 2
-    ret = gpio_pin_configure_dt(&buttons[3], GPIO_INPUT);
-    if (ret) {
-        LOG_ERR("gpio_pin_configure_dt(3) failed %d", ret);
-        return CHIP_ERROR_INTERNAL;
-    }
-    gpio_init_callback(&button_cb_data[3], Button3Handler, BIT(buttons[3].pin));
-    ret = gpio_add_callback(buttons[3].port, &button_cb_data[3]);
-    if (ret) {
-        LOG_ERR("gpio_add_callback(3) failed %d", ret);
-        return CHIP_ERROR_INTERNAL;
-    }
-    ret = gpio_pin_interrupt_configure_dt(&buttons[3], GPIO_INT_EDGE_TO_ACTIVE);
-    if (ret) {
-        LOG_ERR("gpio_pin_interrupt_configure_dt(3) failed %d", ret);
-        return CHIP_ERROR_INTERNAL;
-    }
-#endif
 
     // Initialize function button timer
     k_timer_init(&sFunctionTimer, &AppTask::FunctionTimerTimeoutCallback, nullptr);
@@ -286,7 +255,6 @@ void AppTask::IdentifyStopHandler(Identify *)
     PostEvent(event);
 }
 
-#if NUMBER_OF_BUTTONS == 2
 void AppTask::StartBLEAdvertisementAndLockActionEventHandler(const AppEvent & event)
 {
     if (event.ButtonEvent.Action == static_cast<uint8_t>(AppEventType::ButtonPushed))
@@ -310,7 +278,6 @@ void AppTask::StartBLEAdvertisementAndLockActionEventHandler(const AppEvent & ev
         }
     }
 }
-#endif
 
 void AppTask::LockActionEventHandler(const AppEvent & event)
 {
@@ -344,33 +311,13 @@ void AppTask::Button1Handler(const struct device *dev, struct gpio_callback *cb,
 
     AppEvent button_event;
     button_event.Type = AppEventType::Button;
-#if NUMBER_OF_BUTTONS == 2
     int state = gpio_pin_get_dt(&buttons[1]);
     button_event.ButtonEvent.PinNo = BLE_ADVERTISEMENT_START_AND_LOCK_BUTTON;
     button_event.ButtonEvent.Action =
         static_cast<uint8_t>(state ? AppEventType::ButtonPushed : AppEventType::ButtonReleased);
     button_event.Handler = StartBLEAdvertisementAndLockActionEventHandler;
-#else
-    button_event.ButtonEvent.PinNo  = LOCK_BUTTON;
-    button_event.ButtonEvent.Action = static_cast<uint8_t>(AppEventType::ButtonPushed);
-    button_event.Handler            = LockActionEventHandler;
-#endif
     PostEvent(button_event);
 }
-
-#if NUMBER_OF_BUTTONS != 2
-void AppTask::Button3Handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
-{
-    LOG_INF("Button 3 event");
-
-    AppEvent button_event;
-    button_event.Type = AppEventType::Button;
-    button_event.ButtonEvent.PinNo  = BLE_ADVERTISEMENT_START_BUTTON;
-    button_event.ButtonEvent.Action = static_cast<uint8_t>(AppEventType::ButtonPushed);
-    button_event.Handler            = StartBLEAdvertisementHandler;
-    PostEvent(button_event);
-}
-#endif
 
 void AppTask::FunctionTimerTimeoutCallback(k_timer * timer)
 {
@@ -404,14 +351,10 @@ void AppTask::FunctionTimerEventHandler(const AppEvent & event)
 
         // Turn off all LEDs before starting blink to make sure blink is coordinated.
         sStatusLED.Set(false);
-#if NUMBER_OF_LEDS == 4
-        sFactoryResetLEDs.Set(false);
-#endif
+        sFactoryResetLED.Set(false);
 
         sStatusLED.Blink(LedConsts::kBlinkRate_ms);
-#if NUMBER_OF_LEDS == 4
-        sFactoryResetLEDs.Blink(LedConsts::kBlinkRate_ms);
-#endif
+        sFactoryResetLED.Blink(LedConsts::kBlinkRate_ms);
     }
     else if (Instance().mFunction == FunctionEvent::FactoryReset)
     {
@@ -422,9 +365,7 @@ void AppTask::FunctionTimerEventHandler(const AppEvent & event)
     else if (Instance().mFunction == FunctionEvent::AdvertisingStart)
     {
         // The button was held past kAdvertisingTriggerTimeout, start BLE advertisement if we have 2 buttons UI
-#if NUMBER_OF_BUTTONS == 2
         StartBLEAdvertisementHandler(event);
-#endif
     }
 }
 
@@ -457,15 +398,14 @@ void AppTask::FunctionHandler(const AppEvent & event)
 
 #ifdef CONFIG_MCUMGR_TRANSPORT_BT
             GetDFUOverSMP().StartServer();
+            UpdateStatusLED();
 #else
             LOG_INF("Software update is disabled");
 #endif
         }
         else if (Instance().mFunctionTimerActive && Instance().mFunction == FunctionEvent::FactoryReset)
         {
-#if NUMBER_OF_LEDS == 4
-            sFactoryResetLEDs.Set(false);
-#endif
+            sFactoryResetLED.Set(false);
             UpdateStatusLED();
             Instance().CancelTimer();
             Instance().mFunction = FunctionEvent::NoneSelected;
