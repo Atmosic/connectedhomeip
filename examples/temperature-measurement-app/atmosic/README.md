@@ -1,9 +1,7 @@
-# Atmosic Matter Lock Example Application
+# Atmosic Temp Sensor Example Application
 
-The Atmosic Lock Example demonstrates how to remotely control a door lock
-device with one basic bolt. It uses buttons to test changing the lock and device
-states and LEDs to show the state of these changes. You can use this example as
-a reference for creating your own application.
+The Atmosic Temp Sensor Example demonstrates a sensor product that reports
+temperature.
 
 The example is based on
 [Matter](https://github.com/project-chip/connectedhomeip) and Atmosic
@@ -25,20 +23,36 @@ and [Zephyr RTOS](https://zephyrproject.org/).
 
 By default, the Matter accessory device has IPv6 networking disabled. You must
 pair it with the Matter controller over Bluetooth® LE to get the configuration
-from the controller to use the device within a Thread or Wi-Fi network. You have
+from the controller to use the device within a Thread network. You have
 to make the device discoverable manually (for security reasons). See
 [Bluetooth LE advertising](#bluetooth-le-advertising) to learn how to do this.
 The controller must get the commissioning information from the Matter accessory
 device and provision the device into the network.
 
-The sample uses buttons for changing the lock and device states, and LEDs to
-show the state of these changes. You can test it in the following ways:
+You can test this application remotely over the Thread protocol,
+which requires more devices, including a Matter controller that
+you can configure either on a PC or a mobile device.
 
--   Standalone, using a single EVK that runs the door lock application.
+In Matter, the following types of sensor devices are available:
 
--   Remotely over the Thread protocol, which
-    requires more devices, including a Matter controller that you can configure
-    either on a PC or a mobile device.
+-   Endpoint 1: Temperature Sensor
+
+### Temperature Sensor
+
+The ATM34 EVKs are populated with an ENS210 Digital Temperature and Humidity
+sensor that is wired via I2C. It is used to periodically provide a temperature
+value for Matter endpoint 1.
+
+### Common example settings
+
+The Matter device that runs this application is controlled by the
+Matter controller device over the Thread protocol. By default, the Matter device
+has Thread disabled, and it should be paired with the Matter controller and get
+configuration from it. Some actions required before establishing full
+communication are described below.
+
+The example can be configured to use the secure bootloader and utilize it for
+performing over-the-air Device Firmware Upgrade using Bluetooth LE.
 
 ### Bluetooth LE advertising
 
@@ -82,8 +96,8 @@ The example supports building and running on the following devices:
 | [ATMEVK-3425](https://atmosic.com/support_developer_kits/)                                | `ATMEVK-3425-PQK-2`        | <details><summary>ATMEVK-3425</summary></details>                                                                                                |
 | [ATMEVK-3430e](https://atmosic.com/support_developer_kits/)                               | `ATMEVK-3430e-WQN-2`       | <details><summary>ATMEVK-3430e</summary></details>                                                                                               |
 
-For all EVKs, JP25 and JP27 need to be installed in order to enable the
-buttons and the LEDs.
+For all EVKs, JP25 and JP27 need to be installed in order to enable the onboard
+temp/humidity sensor, the buttons, and the LEDs.
 
 <hr>
 
@@ -114,17 +128,9 @@ following states are possible:
 
 -   _Solid On_ &mdash; The device is fully provisioned.
 
-**LED 2 - Yellow** simulates the lock bolt and shows the state of the lock.
-The following states are possible:
+**LED 2 - Yellow** blinks to identify the device.
 
--   _Solid On_ &mdash; The bolt is extended and the door is locked.
-
--   _Off_ &mdash; The bolt is retracted and the door is unlocked.
-
--   _Rapid Even Flashing (100 ms on/100 ms off during 2 s)_ &mdash; The
-    simulated bolt is in motion from one position to another.
-
-    Additionally, the LED starts blinking evenly (500 ms on/500 ms off) when the
+    The LED starts blinking evenly (500 ms on/500 ms off) when the
     Identify command of the Identify cluster is received on the endpoint 1. The
     command’s argument can be used to specify the duration of the effect.
 
@@ -147,18 +153,15 @@ platform image.
     device. Releasing the button within the 3-second window cancels the factory
     reset procedure.
 
-**Button 2** &mdash; Pressing the button once changes the lock state to the
-opposite one.
+**Button 2** can be used for the following purposes:
 
 -   On ATMEVK-3425 and ATMEVK-3430e:
 
-    -   If pressed for less than three seconds, it changes the lock state to the
-        opposite one.
-
-    -   If pressed for more than three seconds, it
-        enables Bluetooth LE advertising for the predefined period of time (15
-        minutes by default), and makes the device discoverable over Bluetooth
-        LE.
+    -   If the device is not commissioned to a Matter network, it
+        enables Bluetooth LE advertising for the predefined
+        period of time (15 minutes by default), and makes the device
+        discoverable over Bluetooth LE. This button is used during the
+        commissioning procedure.
 
 **SEGGER J-Link USB port** can be used to get logs from the device or
 communicate with it using the
@@ -181,7 +184,7 @@ environment:
 
 1.  Navigate to the example's directory:
 
-        $ cd examples/lock-app/atmosic
+        $ cd examples/ces-sensor/atmosic
 
 2.  Run the following command to build the example, with _build-target_ replaced
     with the build target name of the Atmosic Technologies' kit you own, for
@@ -264,7 +267,7 @@ page.
 To flash the application to the device, use the west tool and run the following
 command from the example directory:
 
-        $ west flash --erase
+    $ west flash --erase
 
 If you have multiple development kits connected, west will prompt you to pick
 the correct one.
@@ -272,26 +275,13 @@ the correct one.
 To debug the application on target, run the following command from the example
 directory:
 
-        $ west debug
+    $ west debug
 
 <hr>
 
 ## Testing the example
 
-Check the [CLI tutorial](../../../docs/guides/nrfconnect_examples_cli.md) to
-learn how to use command-line interface of the application.
-
-### Testing using Linux CHIPTool
-
-Read the [CHIP Tool user guide](../../../docs/guides/chip_tool_guide.md) to see
-how to use [CHIP Tool for Linux or mac OS](../../chip-tool/README.md) to
-commission and control the application within a Matter-enabled Thread or Wi-Fi
-network.
-
-### Testing using Android CHIPTool
-
-Read the
-[Android commissioning guide](../../../docs/guides/nrfconnect_android_commissioning.md)
-to see how to use [CHIPTool](../../../examples/android/CHIPTool/README.md) for
-Android smartphones to commission and control the application within a
-Matter-enabled Thread or Wi-Fi network.
+The easiest way to test this example is to commission the device to an
+ecosystem with a Matter controller such as [Apple Home](https://www.apple.com/home-app/)
+or [Home Assistant](https://www.home-assistant.io/). Both of those will
+subscribe to and render status for all three Matter endpoints.

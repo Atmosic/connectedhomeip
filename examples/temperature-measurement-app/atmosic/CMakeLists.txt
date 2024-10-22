@@ -1,5 +1,5 @@
 #
-#    Copyright (c) 2020-2024 Project CHIP Authors
+#    Copyright (c) 2022-2024 Project CHIP Authors
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
 #    you may not use this file except in compliance with the License.
@@ -13,7 +13,8 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 #
-cmake_minimum_required(VERSION 3.13.1)
+
+cmake_minimum_required(VERSION 3.20.0)
 
 get_filename_component(CHIP_ROOT $ENV{ZEPHYR_BASE}/../modules/lib/matter REALPATH)
 get_filename_component(ATMOSIC_COMMON ${CHIP_ROOT}/examples/platform/atmosic REALPATH)
@@ -39,7 +40,7 @@ find_package(Zephyr HINTS $ENV{ZEPHYR_BASE})
 # See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80635
 target_compile_options(app PRIVATE -Werror -Wno-error=maybe-uninitialized)
 
-project(chip-lock-example)
+project(chip-atmosic-temperature-measurement-example)
 
 include(${CHIP_ROOT}/config/atmosic/app/enable-gnu-std.cmake)
 include(${CHIP_ROOT}/config/atmosic/app/flashing.cmake)
@@ -48,21 +49,16 @@ include(${CHIP_ROOT}/src/app/chip_data_model.cmake)
 target_include_directories(app PRIVATE
                            main/include
                            ${GEN_DIR}/app-common
-                           ${GEN_DIR}/lock-app
+                           ${GEN_DIR}/temperature-measurement-app
                            ${ATMOSIC_COMMON}/util/include
                            ${ATMOSIC_COMMON}/app/include)
 
 target_sources(app PRIVATE
                main/AppTask.cpp
-               main/BoltLockManager.cpp
-               main/ZclCallbacks.cpp
+               main/SensorManager.cpp
                ${ATMOSIC_COMMON}/common/mainCommon.cpp
                ${ATMOSIC_COMMON}/util/LEDWidget.cpp)
 
-chip_configure_data_model(app
-    INCLUDE_SERVER
-    ZAP_FILE ${CHIP_ROOT}/examples/lock-app/lock-common/lock-app.zap
-)
 
 if(CONFIG_CHIP_OTA_REQUESTOR OR CONFIG_MCUMGR_TRANSPORT_BT)
     target_sources(app PRIVATE ${ATMOSIC_COMMON}/util/OTAUtil.cpp)
@@ -71,3 +67,8 @@ endif()
 if(CONFIG_MCUMGR_TRANSPORT_BT)
     target_sources(app PRIVATE ${ATMOSIC_COMMON}/util/DFUOverSMP.cpp)
 endif()
+
+chip_configure_data_model(app
+    INCLUDE_SERVER
+    ZAP_FILE ${CHIP_ROOT}/examples/temperature-measurement-app/temperature-measurement-common/temperature-measurement.zap
+)

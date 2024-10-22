@@ -110,7 +110,7 @@ the UART console.
 
 #### Thread provisioning
 
-The provisioning operation, which is the Last part of the rendezvous procedure,
+The provisioning operation, which is the last part of the rendezvous procedure,
 involves sending the Thread network credentials from the Matter
 controller to the Matter device. As a result, the device joins the Thread
 network and can communicate with other devices in the network.

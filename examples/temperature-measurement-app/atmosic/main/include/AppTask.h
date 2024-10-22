@@ -1,7 +1,6 @@
 /*
  *
- *    Copyright (c) 2020-2024 Project CHIP Authors
- *    Copyright (c) 2019 Google LLC.
+ *    Copyright (c) 2022-2024 Project CHIP Authors
  *    All rights reserved.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@
 #pragma once
 
 #include "AppEvent.h"
-#include "BoltLockManager.h"
 #include "LEDWidget.h"
 
 #include <platform/CHIPDeviceLayer.h>
@@ -34,6 +32,8 @@
 #ifdef CONFIG_MCUMGR_TRANSPORT_BT
 #include "DFUOverSMP.h"
 #endif
+
+#include <cstdint>
 
 struct k_timer;
 struct Identify;
@@ -49,26 +49,31 @@ public:
 
     CHIP_ERROR StartApp();
 
-    void UpdateClusterState(BoltLockManager::State state, BoltLockManager::OperationSource source);
-
-    static void PostEvent(const AppEvent & event);
+    void UpdateClusterState();
 
     static void IdentifyStartHandler(Identify *);
     static void IdentifyStopHandler(Identify *);
 
 private:
+    enum class Timer : uint8_t
+    {
+        Function,
+        TemperatureMeasurement,
+    };
+    enum class Button : uint8_t
+    {
+        Function,
+    };
+
     CHIP_ERROR Init();
 
-    void CancelTimer();
-    void StartTimer(uint32_t timeoutInMs);
-
+    static void PostEvent(const AppEvent & event);
     static void DispatchEvent(const AppEvent & event);
-    static void FunctionTimerEventHandler(const AppEvent & event);
-    static void FunctionHandler(const AppEvent & event);
-    static void StartBLEAdvertisementAndLockActionEventHandler(const AppEvent & event);
-    static void LockActionEventHandler(const AppEvent & event);
-    static void UpdateLedStateEventHandler(const AppEvent & event);
+    static void ButtonPushHandler(const AppEvent & event);
+    static void ButtonReleaseHandler(const AppEvent & event);
+    static void TimerEventHandler(const AppEvent & event);
     static void StartBLEAdvertisementHandler(const AppEvent & event);
+    static void UpdateLedStateEventHandler(const AppEvent & event);
 
     static void ChipEventHandler(const chip::DeviceLayer::ChipDeviceEvent * event, intptr_t arg);
     static void Button0Handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins);
@@ -78,10 +83,10 @@ private:
     static void FunctionTimerTimeoutCallback(k_timer * timer);
     static void UpdateStatusLED();
 
-    static void LockStateChanged(BoltLockManager::State state, BoltLockManager::OperationSource source);
+    static void StartTimer(Timer, uint32_t);
+    static void CancelTimer(Timer);
 
-    FunctionEvent mFunction   = FunctionEvent::NoneSelected;
-    bool mFunctionTimerActive = false;
+    FunctionEvent mFunction = FunctionEvent::NoneSelected;
 
 #if CONFIG_CHIP_FACTORY_DATA
     chip::DeviceLayer::FactoryDataProvider<chip::DeviceLayer::RRAMFactoryData> mFactoryDataProvider;

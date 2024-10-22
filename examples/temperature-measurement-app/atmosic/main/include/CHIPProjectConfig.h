@@ -16,15 +16,20 @@
  *    limitations under the License.
  */
 
+/**
+ *    @file
+ *          Example project configuration file for CHIP.
+ *
+ *          This is a place to put application or project-specific overrides
+ *          to the default configuration values for general CHIP features.
+ *
+ */
+
 #pragma once
 
-// ---- Lighting Example App Config ----
+#define CHIP_CONFIG_CONTROLLER_MAX_ACTIVE_DEVICES 2
 
-#include "BoardUtil.h"
+#define CHIP_DEVICE_CONFIG_USE_TEST_SETUP_PIN_CODE CONFIG_CHIP_DEVICE_SPAKE2_PASSCODE
+#define CHIP_DEVICE_CONFIG_USE_TEST_SETUP_DISCRIMINATOR CONFIG_CHIP_DEVICE_DISCRIMINATOR
 
-#define FUNCTION_BUTTON 0
-#define BLE_ADVERTISEMENT_START_AND_SWITCH_BUTTON 1
-
-#define SYSTEM_STATE_LED 0
-#define IDENTIFY_LED 1
-#define FACTORY_RESET_SIGNAL_LED 2
+#define CHIP_DEVICE_CONFIG_TEST_SERIAL_NUMBER "TEST_SN_LAB000"

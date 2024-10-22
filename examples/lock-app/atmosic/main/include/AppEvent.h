@@ -1,5 +1,6 @@
 /*
  *
+ *    Copyright (c) 2022-2024 Project CHIP Authors
  *    Copyright (c) 2018 Nest Labs, Inc.
  *    All rights reserved.
  *

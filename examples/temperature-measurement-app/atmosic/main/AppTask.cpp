@@ -21,7 +21,7 @@
 #include "BoardUtil.h"
 #include "FabricTableDelegate.h"
 #include "LEDUtil.h"
-#include "LightSwitch.h"
+#include "SensorManager.h"
 
 #include <DeviceInfoProviderImpl.h>
 #include <app/clusters/identify-server/identify-server.h>
@@ -52,20 +52,19 @@ using namespace ::chip::Credentials;
 using namespace ::chip::DeviceLayer;
 
 namespace {
-constexpr EndpointId kLightDimmerSwitchEndpointId  = 1;
-constexpr EndpointId kLightGenericSwitchEndpointId = 2;
-constexpr EndpointId kLightEndpointId              = 1;
+constexpr EndpointId kTemperatureEndpointId = 1;
 
 constexpr uint32_t kFactoryResetTriggerTimeout      = 3000;
 constexpr uint32_t kFactoryResetCancelWindowTimeout = 3000;
-constexpr uint32_t kDimmerTriggeredTimeout          = 500;
-constexpr uint32_t kDimmerInterval                  = 300;
 constexpr size_t kAppEventQueueSize                 = 10;
+constexpr uint16_t kSensorTimerPeriodMs = 5000; // 5s timer period
 
 K_MSGQ_DEFINE(sAppEventQueue, sizeof(AppEvent), kAppEventQueueSize, alignof(AppEvent));
 
-Identify sIdentify = { kLightEndpointId, AppTask::IdentifyStartHandler, AppTask::IdentifyStopHandler,
+#ifdef HAS_IDENTIFY_CLUSTER
+Identify sIdentify = { kTemperatureEndpointId, AppTask::IdentifyStartHandler, AppTask::IdentifyStopHandler,
                        Clusters::Identify::IdentifyTypeEnum::kVisibleIndicator };
+#endif
 
 #if CONFIG_CHIP_FACTORY_DATA || CONFIG_CHIP_OTA_REQUESTOR
 // NOTE! This key is for test/certification only and should not be available in production devices!
@@ -88,11 +87,9 @@ struct gpio_callback button_cb_data[NUMBER_OF_BUTTONS];
 bool sIsNetworkProvisioned = false;
 bool sIsNetworkEnabled     = false;
 bool sHaveBLEConnections   = false;
-bool sWasDimmerTriggered   = false;
 
 k_timer sFunctionTimer;
-k_timer sDimmerPressKeyTimer;
-k_timer sDimmerTimer;
+k_timer sTemperatureMeasurementTimer;
 
 chip::DeviceLayer::DeviceInfoProviderImpl gExampleDeviceInfoProvider;
 } // namespace
@@ -116,8 +113,6 @@ constexpr uint32_t kOff_ms{ 950 };
 
 CHIP_ERROR AppTask::Init()
 {
-    LightSwitch::GetInstance().Init(kLightDimmerSwitchEndpointId, kLightGenericSwitchEndpointId);
-
     // Initialize UI components
     LEDWidget::InitGpio();
     LEDWidget::SetStateUpdateCallback(LEDStateUpdateHandler);
@@ -162,25 +157,6 @@ CHIP_ERROR AppTask::Init()
         return CHIP_ERROR_INTERNAL;
     }
 
-#if NUMBER_OF_BUTTONS != 2
-    ret = gpio_pin_configure_dt(&buttons[3], GPIO_INPUT);
-    if (ret) {
-        LOG_ERR("gpio_pin_configure_dt(3) failed %d", ret);
-        return CHIP_ERROR_INTERNAL;
-    }
-    gpio_init_callback(&button_cb_data[3], Button3Handler, BIT(buttons[3].pin));
-    ret = gpio_add_callback(buttons[3].port, &button_cb_data[3]);
-    if (ret) {
-        LOG_ERR("gpio_add_callback(3) failed %d", ret);
-        return CHIP_ERROR_INTERNAL;
-    }
-    ret = gpio_pin_interrupt_configure_dt(&buttons[3], GPIO_INT_EDGE_TO_ACTIVE);
-    if (ret) {
-        LOG_ERR("gpio_pin_interrupt_configure_dt(3) failed %d", ret);
-        return CHIP_ERROR_INTERNAL;
-    }
-#endif
-
 #ifdef CONFIG_CHIP_OTA_REQUESTOR
     /* OTA image confirmation must be done before the factory data init. */
     OtaConfirmNewImage();
@@ -188,11 +164,10 @@ CHIP_ERROR AppTask::Init()
 
     // Initialize Timers
     k_timer_init(&sFunctionTimer, AppTask::FunctionTimerTimeoutCallback, nullptr);
-    k_timer_init(&sDimmerPressKeyTimer, AppTask::FunctionTimerTimeoutCallback, nullptr);
-    k_timer_init(&sDimmerTimer, AppTask::FunctionTimerTimeoutCallback, nullptr);
-    k_timer_user_data_set(&sDimmerTimer, this);
-    k_timer_user_data_set(&sDimmerPressKeyTimer, this);
+    k_timer_init(&sTemperatureMeasurementTimer, AppTask::FunctionTimerTimeoutCallback, nullptr);
     k_timer_user_data_set(&sFunctionTimer, this);
+    k_timer_user_data_set(&sTemperatureMeasurementTimer, this);
+    StartTimer(Timer::TemperatureMeasurement, kSensorTimerPeriodMs);
 
     // Initialize DFU
 #ifdef CONFIG_MCUMGR_TRANSPORT_BT
@@ -276,19 +251,11 @@ void AppTask::ButtonPushHandler(const AppEvent & event)
             Instance().StartTimer(Timer::Function, kFactoryResetTriggerTimeout);
             Instance().mFunction = FunctionEvent::SoftwareUpdate;
             break;
-        case
-#if NUMBER_OF_BUTTONS == 2
-            BLE_ADVERTISEMENT_START_AND_SWITCH_BUTTON:
+        case BLE_ADVERTISEMENT_START_BUTTON:
             if (!ConnectivityMgr().IsBLEAdvertisingEnabled() && Server::GetInstance().GetFabricTable().FabricCount() == 0)
             {
                 break;
             }
-#else
-            SWITCH_BUTTON:
-#endif
-            LOG_INF("Button has been pressed, keep in this state for at least 500 ms to change light sensitivity of binded "
-                    "lighting devices.");
-            Instance().StartTimer(Timer::DimmerTrigger, kDimmerTriggeredTimeout);
             break;
         default:
             break;
@@ -326,28 +293,17 @@ void AppTask::ButtonReleaseHandler(const AppEvent & event)
                 LOG_INF("Factory Reset has been canceled");
             }
             break;
-#if NUMBER_OF_BUTTONS == 4
-        case SWITCH_BUTTON:
-#else
-        case BLE_ADVERTISEMENT_START_AND_SWITCH_BUTTON:
+        case BLE_ADVERTISEMENT_START_BUTTON:
             if (!ConnectivityMgr().IsBLEAdvertisingEnabled() && Server::GetInstance().GetFabricTable().FabricCount() == 0)
             {
                 AppEvent buttonEvent;
                 buttonEvent.Type               = AppEventType::Button;
-                buttonEvent.ButtonEvent.PinNo  = BLE_ADVERTISEMENT_START_AND_SWITCH_BUTTON;
+                buttonEvent.ButtonEvent.PinNo  = BLE_ADVERTISEMENT_START_BUTTON;
                 buttonEvent.ButtonEvent.Action = static_cast<uint8_t>(AppEventType::ButtonPushed);
                 buttonEvent.Handler            = StartBLEAdvertisementHandler;
                 PostEvent(buttonEvent);
                 break;
             }
-#endif
-            if (!sWasDimmerTriggered)
-            {
-                LightSwitch::GetInstance().InitiateActionSwitch(LightSwitch::Action::Toggle);
-            }
-            Instance().CancelTimer(Timer::Dimmer);
-            Instance().CancelTimer(Timer::DimmerTrigger);
-            sWasDimmerTriggered = false;
             break;
         default:
             break;
@@ -387,22 +343,27 @@ void AppTask::TimerEventHandler(const AppEvent & event)
                 chip::Server::GetInstance().ScheduleFactoryReset();
             }
             break;
-        case Timer::DimmerTrigger:
-            LOG_INF("Dimming started...");
-            sWasDimmerTriggered = true;
-            LightSwitch::GetInstance().InitiateActionSwitch(LightSwitch::Action::On);
-            Instance().StartTimer(Timer::Dimmer, kDimmerInterval);
-            Instance().CancelTimer(Timer::DimmerTrigger);
-            break;
-        case Timer::Dimmer:
-            LightSwitch::GetInstance().DimmerChangeBrightness();
-            break;
+        case Timer::TemperatureMeasurement:
+	    if (SensorMgr().SampleTemp()) {
+		int16_t temp = SensorMgr().GetMeasuredTemp();
+
+		PlatformMgr().LockChipStack();
+		app::Clusters::TemperatureMeasurement::Attributes::MeasuredValue::Set(kTemperatureEndpointId, temp);
+		PlatformMgr().UnlockChipStack();
+
+		LOG_DBG("Temperature is (%d*0.01)°C", temp);
+	    }
+
+	    // Start next timer to handle temp sensor.
+	    StartTimer(Timer::TemperatureMeasurement, kSensorTimerPeriodMs);
+	    break;
         default:
             break;
         }
     }
 }
 
+#ifdef HAS_IDENTIFY_CLUSTER
 void AppTask::IdentifyStartHandler(Identify *)
 {
     AppEvent event;
@@ -418,6 +379,7 @@ void AppTask::IdentifyStopHandler(Identify *)
     event.Handler = [](const AppEvent &) { sIdentifyLED.Set(false); };
     PostEvent(event);
 }
+#endif
 
 void AppTask::StartBLEAdvertisementHandler(const AppEvent &)
 {
@@ -494,6 +456,7 @@ void AppTask::Button0Handler(const struct device *dev, struct gpio_callback *cb,
 {
     LOG_INF("Button 0 event");
 
+#if 0
     AppEvent buttonEvent;
     buttonEvent.Type = AppEventType::Button;
     buttonEvent.ButtonEvent.PinNo  = FUNCTION_BUTTON;
@@ -508,6 +471,7 @@ void AppTask::Button0Handler(const struct device *dev, struct gpio_callback *cb,
         buttonEvent.Handler            = ButtonReleaseHandler;
     }
     PostEvent(buttonEvent);
+#endif
 }
 
 void AppTask::Button1Handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
@@ -516,11 +480,7 @@ void AppTask::Button1Handler(const struct device *dev, struct gpio_callback *cb,
 
     AppEvent buttonEvent;
     buttonEvent.Type = AppEventType::Button;
-#if NUMBER_OF_BUTTONS == 2
-    buttonEvent.ButtonEvent.PinNo = BLE_ADVERTISEMENT_START_AND_SWITCH_BUTTON;
-#else
-    buttonEvent.ButtonEvent.PinNo = SWITCH_BUTTON;
-#endif
+    buttonEvent.ButtonEvent.PinNo = BLE_ADVERTISEMENT_START_BUTTON;
     if (gpio_pin_get_dt(&buttons[1]))
     {
         buttonEvent.ButtonEvent.Action = static_cast<uint8_t>(AppEventType::ButtonPushed);
@@ -534,20 +494,6 @@ void AppTask::Button1Handler(const struct device *dev, struct gpio_callback *cb,
     PostEvent(buttonEvent);
 }
 
-#if NUMBER_OF_BUTTONS != 2
-void AppTask::Button3Handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
-{
-    LOG_INF("Button 3 event");
-
-    AppEvent buttonEvent;
-    buttonEvent.Type = AppEventType::Button;
-    buttonEvent.ButtonEvent.PinNo  = BLE_ADVERTISEMENT_START_BUTTON;
-    buttonEvent.ButtonEvent.Action = static_cast<uint8_t>(AppEventType::ButtonPushed);
-    buttonEvent.Handler            = StartBLEAdvertisementHandler;
-    PostEvent(buttonEvent);
-}
-#endif
-
 void AppTask::StartTimer(Timer timer, uint32_t timeoutMs)
 {
     switch (timer)
@@ -555,11 +501,8 @@ void AppTask::StartTimer(Timer timer, uint32_t timeoutMs)
     case Timer::Function:
         k_timer_start(&sFunctionTimer, K_MSEC(timeoutMs), K_NO_WAIT);
         break;
-    case Timer::DimmerTrigger:
-        k_timer_start(&sDimmerPressKeyTimer, K_MSEC(timeoutMs), K_NO_WAIT);
-        break;
-    case Timer::Dimmer:
-        k_timer_start(&sDimmerTimer, K_MSEC(timeoutMs), K_MSEC(timeoutMs));
+    case Timer::TemperatureMeasurement:
+        k_timer_start(&sTemperatureMeasurementTimer, K_MSEC(timeoutMs), K_NO_WAIT);
         break;
     default:
         break;
@@ -573,11 +516,8 @@ void AppTask::CancelTimer(Timer timer)
     case Timer::Function:
         k_timer_stop(&sFunctionTimer);
         break;
-    case Timer::DimmerTrigger:
-        k_timer_stop(&sDimmerPressKeyTimer);
-        break;
-    case Timer::Dimmer:
-        k_timer_stop(&sDimmerTimer);
+    case Timer::TemperatureMeasurement:
+        k_timer_stop(&sTemperatureMeasurementTimer);
         break;
     default:
         break;
@@ -617,18 +557,10 @@ void AppTask::FunctionTimerTimeoutCallback(k_timer * timer)
         event.Handler              = TimerEventHandler;
         PostEvent(event);
     }
-    if (timer == &sDimmerPressKeyTimer)
+    if (timer == &sTemperatureMeasurementTimer)
     {
         event.Type                 = AppEventType::Timer;
-        event.TimerEvent.TimerType = (uint8_t) Timer::DimmerTrigger;
-        event.TimerEvent.Context   = k_timer_user_data_get(timer);
-        event.Handler              = TimerEventHandler;
-        PostEvent(event);
-    }
-    if (timer == &sDimmerTimer)
-    {
-        event.Type                 = AppEventType::Timer;
-        event.TimerEvent.TimerType = (uint8_t) Timer::Dimmer;
+        event.TimerEvent.TimerType = (uint8_t) Timer::TemperatureMeasurement;
         event.TimerEvent.Context   = k_timer_user_data_get(timer);
         event.Handler              = TimerEventHandler;
         PostEvent(event);

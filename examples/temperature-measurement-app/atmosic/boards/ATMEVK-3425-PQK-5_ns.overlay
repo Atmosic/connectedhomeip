@@ -1,6 +1,6 @@
 /*
  *
- *    Copyright (c) 2022-2024 Project CHIP Authors
+ *    Copyright (c) 2023-2024 Project CHIP Authors
  *    All rights reserved.
  *
  *    Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,15 +16,27 @@
  *    limitations under the License.
  */
 
-#pragma once
+/ {
+	chosen {
+		zephyr,shell-uart = &uart0;
+	};
+};
 
-// ---- Lighting Example App Config ----
+&uart0 {
+	status = "okay";
+	hw-flow-control;
+};
 
-#include "BoardUtil.h"
+&ieee802154 {
+	status = "okay";
+};
 
-#define FUNCTION_BUTTON 0
-#define BLE_ADVERTISEMENT_START_AND_SWITCH_BUTTON 1
+&i2c0 {
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_FAST>;
 
-#define SYSTEM_STATE_LED 0
-#define IDENTIFY_LED 1
-#define FACTORY_RESET_SIGNAL_LED 2
+	ens210: ens210@43 {
+		compatible = "ams,ens210";
+		reg = <0x43>;
+	};
+};
