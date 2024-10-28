@@ -18,8 +18,6 @@
 
 #pragma once
 
-// ---- Lighting Example App Config ----
-
 #include "BoardUtil.h"
 
 #define FUNCTION_BUTTON 0

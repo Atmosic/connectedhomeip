@@ -20,8 +20,6 @@
 
 #include "BoardUtil.h"
 
-// ---- Lock Example App Config ----
-
 #define FUNCTION_BUTTON 0
 #define BLE_ADVERTISEMENT_START_AND_LOCK_BUTTON 1
 
