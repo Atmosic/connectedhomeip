@@ -456,7 +456,6 @@ void AppTask::Button0Handler(const struct device *dev, struct gpio_callback *cb,
 {
     LOG_INF("Button 0 event");
 
-#if 0
     AppEvent buttonEvent;
     buttonEvent.Type = AppEventType::Button;
     buttonEvent.ButtonEvent.PinNo  = FUNCTION_BUTTON;
@@ -471,7 +470,6 @@ void AppTask::Button0Handler(const struct device *dev, struct gpio_callback *cb,
         buttonEvent.Handler            = ButtonReleaseHandler;
     }
     PostEvent(buttonEvent);
-#endif
 }
 
 void AppTask::Button1Handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
