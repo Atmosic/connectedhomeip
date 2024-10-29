@@ -13,15 +13,14 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 #
-mainmenu "Matter nRF Connect Light Switch Example Application"
+mainmenu "Matter Atmosic Light Switch Example Application"
 
 config STATE_LEDS
 	bool "Use LEDs to indicate the device state"
 	default y
 	help
 	  Use LEDs to render the current state of the device such as the progress of commissioning of
-	  the device into a network or the factory reset initiation. Note that setting this option to
-	  'n' does not disable the LED indicating the state of the simulated bolt.
+	  the device into a network or the factory reset initiation.
 
 # Sample configuration used for Thread networking
 if NET_L2_OPENTHREAD

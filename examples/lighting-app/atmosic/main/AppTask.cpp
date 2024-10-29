@@ -1,0 +1,639 @@
+/*
+ *
+ *    Copyright (c) 2020-2024 Project CHIP Authors
+ *    All rights reserved.
+ *
+ *    Licensed under the Apache License, Version 2.0 (the "License");
+ *    you may not use this file except in compliance with the License.
+ *    You may obtain a copy of the License at
+ *
+ *        http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *    Unless required by applicable law or agreed to in writing, software
+ *    distributed under the License is distributed on an "AS IS" BASIS,
+ *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *    See the License for the specific language governing permissions and
+ *    limitations under the License.
+ */
+
+#include "AppTask.h"
+#include "AppConfig.h"
+#include "FabricTableDelegate.h"
+#include "LEDUtil.h"
+#include "LEDWidget.h"
+#include "PWMDevice.h"
+#include "BoardUtil.h"
+
+#include <DeviceInfoProviderImpl.h>
+#include <app-common/zap-generated/attributes/Accessors.h>
+#include <app/DeferredAttributePersistenceProvider.h>
+#include <app/clusters/identify-server/identify-server.h>
+#include <app/server/OnboardingCodesUtil.h>
+#include <app/server/Server.h>
+#include <credentials/DeviceAttestationCredsProvider.h>
+#include <credentials/examples/DeviceAttestationCredsExample.h>
+#include <lib/core/ErrorStr.h>
+#include <lib/support/CHIPMem.h>
+#include <lib/support/CodeUtils.h>
+#include <system/SystemClock.h>
+
+#if CONFIG_CHIP_OTA_REQUESTOR
+#include <app/clusters/ota-requestor/OTATestEventTriggerDelegate.h>
+#include "OTAUtil.h"
+#endif
+
+#include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/drivers/gpio.h>
+#include "at_pinmux.h"
+#include "pinmux.h"
+
+LOG_MODULE_DECLARE(app, CONFIG_CHIP_APP_LOG_LEVEL);
+
+using namespace ::chip;
+using namespace ::chip::app;
+using namespace ::chip::Credentials;
+using namespace ::chip::DeviceLayer;
+
+namespace {
+constexpr uint32_t kFactoryResetTriggerTimeout      = 3000;
+constexpr uint32_t kFactoryResetCancelWindowTimeout = 3000;
+constexpr size_t kAppEventQueueSize                 = 10;
+constexpr EndpointId kLightEndpointId               = 1;
+constexpr uint8_t kDefaultMinLevel = 0;
+constexpr uint8_t kDefaultMaxLevel = 254;
+constexpr uint32_t kAdvertisingTriggerTimeout = 3000;
+
+#if CONFIG_CHIP_FACTORY_DATA || CONFIG_CHIP_OTA_REQUESTOR
+// NOTE! This key is for test/certification only and should not be available in production devices!
+// If CONFIG_CHIP_FACTORY_DATA is enabled, this value is read from the factory data.
+uint8_t sTestEventTriggerEnableKey[TestEventTriggerDelegate::kEnableKeyLength] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+                                                                                   0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff };
+#endif
+
+K_MSGQ_DEFINE(sAppEventQueue, sizeof(AppEvent), kAppEventQueueSize, alignof(AppEvent));
+k_timer sFunctionTimer;
+
+Identify sIdentify = { kLightEndpointId, AppTask::IdentifyStartHandler, AppTask::IdentifyStopHandler,
+                       Clusters::Identify::IdentifyTypeEnum::kVisibleIndicator };
+
+LEDWidget sStatusLED;
+LEDWidget sIdentifyLED;
+LEDWidget sFactoryResetLED;
+
+#define BUTTON_SPEC(n) GPIO_DT_SPEC_GET(n, gpios),
+
+struct gpio_dt_spec buttons[] = {
+    DT_FOREACH_CHILD(BUTTONS_NODE_ID, BUTTON_SPEC)
+};
+struct gpio_callback button_cb_data[NUMBER_OF_BUTTONS];
+
+bool sIsNetworkProvisioned = false;
+bool sIsNetworkEnabled     = false;
+bool sHaveBLEConnections   = false;
+
+const struct pwm_dt_spec sLightPwmDevice = PWM_DT_SPEC_GET(DT_ALIAS(pwm_led0));
+
+chip::DeviceLayer::DeviceInfoProviderImpl gExampleDeviceInfoProvider;
+
+// Define a custom attribute persister which makes actual write of the CurrentLevel attribute value
+// to the non-volatile storage only when it has remained constant for 5 seconds. This is to reduce
+// the flash wearout when the attribute changes frequently as a result of MoveToLevel command.
+// DeferredAttribute object describes a deferred attribute, but also holds a buffer with a value to
+// be written, so it must live so long as the DeferredAttributePersistenceProvider object.
+DeferredAttribute gCurrentLevelPersister(ConcreteAttributePath(kLightEndpointId, Clusters::LevelControl::Id,
+                                                               Clusters::LevelControl::Attributes::CurrentLevel::Id));
+DeferredAttributePersistenceProvider gDeferredAttributePersister(Server::GetInstance().GetDefaultAttributePersister(),
+                                                                 Span<DeferredAttribute>(&gCurrentLevelPersister, 1),
+                                                                 System::Clock::Milliseconds32(5000));
+
+} // namespace
+
+namespace LedConsts {
+constexpr uint32_t kBlinkRate_ms{ 500 };
+constexpr uint32_t kIdentifyBlinkRate_ms{ 500 };
+namespace StatusLed {
+namespace Unprovisioned {
+constexpr uint32_t kOn_ms{ 100 };
+constexpr uint32_t kOff_ms{ kOn_ms };
+} // namespace Unprovisioned
+namespace Provisioned {
+constexpr uint32_t kOn_ms{ 50 };
+constexpr uint32_t kOff_ms{ 950 };
+} // namespace Provisioned
+
+} // namespace StatusLed
+} // namespace LedConsts
+
+CHIP_ERROR AppTask::Init()
+{
+    // Initialize LEDs
+    LEDWidget::InitGpio();
+    LEDWidget::SetStateUpdateCallback(LEDStateUpdateHandler);
+
+    sStatusLED.Init(SYSTEM_STATE_LED);
+    sIdentifyLED.Init(LIGHTING_STATE_LED);
+    sIdentifyLED.Set(false);
+    sFactoryResetLED.Init(FACTORY_RESET_SIGNAL_LED);
+    UpdateStatusLED();
+
+    // Initialize buttons
+    int ret = gpio_pin_configure_dt(&buttons[0], GPIO_INPUT);
+    if (ret) {
+        LOG_ERR("gpio_pin_configure_dt(0) failed %d", ret);
+        return CHIP_ERROR_INTERNAL;
+    }
+    gpio_init_callback(&button_cb_data[0], Button0Handler, BIT(buttons[0].pin));
+    ret = gpio_add_callback(buttons[0].port, &button_cb_data[0]);
+    if (ret) {
+        LOG_ERR("gpio_add_callback(0) failed %d", ret);
+        return CHIP_ERROR_INTERNAL;
+    }
+    ret = gpio_pin_interrupt_configure_dt(&buttons[0], GPIO_INT_EDGE_BOTH);
+    if (ret) {
+        LOG_ERR("gpio_pin_interrupt_configure_dt(0) failed %d", ret);
+        return CHIP_ERROR_INTERNAL;
+    }
+
+    ret = gpio_pin_configure_dt(&buttons[1], GPIO_INPUT);
+    if (ret) {
+        LOG_ERR("gpio_pin_configure_dt(1) failed %d", ret);
+        return CHIP_ERROR_INTERNAL;
+    }
+    gpio_init_callback(&button_cb_data[1], Button1Handler, BIT(buttons[1].pin));
+    ret = gpio_add_callback(buttons[1].port, &button_cb_data[1]);
+    if (ret) {
+        LOG_ERR("gpio_add_callback(1) failed %d", ret);
+        return CHIP_ERROR_INTERNAL;
+    }
+    ret = gpio_pin_interrupt_configure_dt(&buttons[1], GPIO_INT_EDGE_BOTH);
+    if (ret) {
+        LOG_ERR("gpio_pin_interrupt_configure_dt(1) failed %d", ret);
+        return CHIP_ERROR_INTERNAL;
+    }
+
+    // Initialize function button timer
+    k_timer_init(&sFunctionTimer, &AppTask::FunctionTimerTimeoutCallback, nullptr);
+    k_timer_user_data_set(&sFunctionTimer, this);
+
+#ifdef CONFIG_MCUMGR_TRANSPORT_BT
+    // Initialize DFU over SMP
+    GetDFUOverSMP().Init();
+    GetDFUOverSMP().ConfirmNewImage();
+#endif
+
+#ifdef CONFIG_CHIP_OTA_REQUESTOR
+    /* OTA image confirmation must be done before the factory data init. */
+    OtaConfirmNewImage();
+#endif
+
+    // Initialize lighting device (PWM)
+    uint8_t minLightLevel = kDefaultMinLevel;
+    Clusters::LevelControl::Attributes::MinLevel::Get(kLightEndpointId, &minLightLevel);
+
+    uint8_t maxLightLevel = kDefaultMaxLevel;
+    Clusters::LevelControl::Attributes::MaxLevel::Get(kLightEndpointId, &maxLightLevel);
+
+    ret = mPWMDevice.Init(&sLightPwmDevice, minLightLevel, maxLightLevel, maxLightLevel);
+    if (ret != 0)
+    {
+        return chip::System::MapErrorZephyr(ret);
+    }
+    mPWMDevice.SetCallbacks(ActionInitiated, ActionCompleted);
+
+    // Initialize CHIP server
+#if CONFIG_CHIP_FACTORY_DATA
+    ReturnErrorOnFailure(mFactoryDataProvider.Init());
+    SetDeviceInstanceInfoProvider(&mFactoryDataProvider);
+    SetDeviceAttestationCredentialsProvider(&mFactoryDataProvider);
+    SetCommissionableDataProvider(&mFactoryDataProvider);
+    // Read EnableKey from the factory data.
+    MutableByteSpan enableKey(sTestEventTriggerEnableKey);
+    CHIP_ERROR fac_err = mFactoryDataProvider.GetEnableKey(enableKey);
+    if (fac_err != CHIP_NO_ERROR)
+    {
+        LOG_ERR("mFactoryDataProvider.GetEnableKey() failed. Could not delegate a test event trigger");
+        memset(sTestEventTriggerEnableKey, 0, sizeof(sTestEventTriggerEnableKey));
+    }
+#else
+    SetDeviceInstanceInfoProvider(&DeviceInstanceInfoProviderMgrImpl());
+    SetDeviceAttestationCredentialsProvider(Examples::GetExampleDACProvider());
+#endif
+
+    static CommonCaseDeviceServerInitParams initParams;
+#ifdef CONFIG_CHIP_OTA_REQUESTOR
+    static OTATestEventTriggerDelegate testEventTriggerDelegate{ ByteSpan(sTestEventTriggerEnableKey) };
+#endif
+    (void) initParams.InitializeStaticResourcesBeforeServerInit();
+#ifdef CONFIG_CHIP_OTA_REQUESTOR
+    initParams.testEventTriggerDelegate = &testEventTriggerDelegate;
+#endif
+    ReturnErrorOnFailure(chip::Server::GetInstance().Init(initParams));
+    AppFabricTableDelegate::Init();
+
+    gExampleDeviceInfoProvider.SetStorageDelegate(&Server::GetInstance().GetPersistentStorage());
+    chip::DeviceLayer::SetDeviceInfoProvider(&gExampleDeviceInfoProvider);
+    app::SetAttributePersistenceProvider(&gDeferredAttributePersister);
+
+    ConfigurationMgr().LogDeviceConfig();
+    PrintOnboardingCodes(chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kBLE));
+
+    // Add CHIP event handler and start CHIP thread.
+    // Note that all the initialization code should happen prior to this point to avoid data races
+    // between the main and the CHIP threads.
+    PlatformMgr().AddEventHandler(ChipEventHandler, 0);
+
+    CHIP_ERROR err = PlatformMgr().StartEventLoopTask();
+    if (err != CHIP_NO_ERROR)
+    {
+        LOG_ERR("PlatformMgr().StartEventLoopTask() failed");
+    }
+
+    return err;
+}
+
+CHIP_ERROR AppTask::StartApp()
+{
+    ReturnErrorOnFailure(Init());
+
+    AppEvent event = {};
+
+    while (true)
+    {
+        k_msgq_get(&sAppEventQueue, &event, K_FOREVER);
+        DispatchEvent(event);
+    }
+
+    return CHIP_NO_ERROR;
+}
+
+void AppTask::IdentifyStartHandler(Identify *)
+{
+    AppEvent event;
+    event.Type    = AppEventType::IdentifyStart;
+    event.Handler = [](const AppEvent &) {
+        Instance().mPWMDevice.SuppressOutput();
+        PIN_SELECT_GPIO(DT_PROP(DT_PWMS_CTLR(DT_ALIAS(pwm_led0)), pin));
+        sIdentifyLED.Blink(LedConsts::kIdentifyBlinkRate_ms);
+    };
+    PostEvent(event);
+}
+
+void AppTask::IdentifyStopHandler(Identify *)
+{
+    AppEvent event;
+    event.Type    = AppEventType::IdentifyStop;
+    event.Handler = [](const AppEvent &) {
+        sIdentifyLED.Set(false);
+        PIN_SELECT(DT_PROP(DT_PWMS_CTLR(DT_ALIAS(pwm_led0)), pin), CONCAT(PWM, DT_PROP(DT_PWMS_CTLR(DT_ALIAS(pwm_led0)), channel)));
+        Instance().mPWMDevice.ApplyLevel();
+    };
+    PostEvent(event);
+}
+
+void AppTask::StartBLEAdvertisementAndLightingActionEventHandler(const AppEvent & event)
+{
+    if (event.ButtonEvent.Action == static_cast<uint8_t>(AppEventType::ButtonPushed))
+    {
+        Instance().StartTimer(kAdvertisingTriggerTimeout);
+        Instance().mFunction = FunctionEvent::AdvertisingStart;
+    }
+    else
+    {
+        if (Instance().mFunction == FunctionEvent::AdvertisingStart)
+        {
+            Instance().CancelTimer();
+            Instance().mFunction = FunctionEvent::NoneSelected;
+
+            AppEvent button_event;
+            button_event.Type               = AppEventType::Button;
+            button_event.ButtonEvent.PinNo  = BLE_ADVERTISEMENT_START_AND_LIGHTING_BUTTON;
+            button_event.ButtonEvent.Action = static_cast<uint8_t>(AppEventType::ButtonReleased);
+            button_event.Handler            = LightingActionEventHandler;
+            PostEvent(button_event);
+        }
+    }
+}
+
+void AppTask::LightingActionEventHandler(const AppEvent & event)
+{
+    PWMDevice::Action_t action = PWMDevice::INVALID_ACTION;
+    int32_t actor = 0;
+
+    if (event.Type == AppEventType::Lighting)
+    {
+        action = static_cast<PWMDevice::Action_t>(event.LightingEvent.Action);
+        actor = event.LightingEvent.Actor;
+    }
+    else if (event.Type == AppEventType::Button)
+    {
+        action = Instance().mPWMDevice.IsTurnedOn() ? PWMDevice::OFF_ACTION : PWMDevice::ON_ACTION;
+        actor = static_cast<int32_t>(AppEventType::Button);
+    }
+
+    if (action != PWMDevice::INVALID_ACTION && Instance().mPWMDevice.InitiateAction(action, actor, NULL))
+    {
+        LOG_INF("Action is already in progress or active.");
+    }
+}
+
+void AppTask::Button0Handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
+{
+    LOG_INF("Button 0 event");
+
+    AppEvent button_event;
+    button_event.Type = AppEventType::Button;
+    int state = gpio_pin_get_dt(&buttons[0]);
+    button_event.ButtonEvent.PinNo = FUNCTION_BUTTON;
+    button_event.ButtonEvent.Action =
+        static_cast<uint8_t>(state ? AppEventType::ButtonPushed : AppEventType::ButtonReleased);
+    button_event.Handler = FunctionHandler;
+    PostEvent(button_event);
+}
+
+void AppTask::Button1Handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
+{
+    LOG_INF("Button 1 event");
+
+    AppEvent button_event;
+    button_event.Type = AppEventType::Button;
+    int state = gpio_pin_get_dt(&buttons[1]);
+    button_event.ButtonEvent.PinNo = BLE_ADVERTISEMENT_START_AND_LIGHTING_BUTTON;
+    button_event.ButtonEvent.Action =
+        static_cast<uint8_t>(state ? AppEventType::ButtonPushed : AppEventType::ButtonReleased);
+    button_event.Handler = StartBLEAdvertisementAndLightingActionEventHandler;
+    PostEvent(button_event);
+}
+
+void AppTask::FunctionTimerTimeoutCallback(k_timer * timer)
+{
+    if (!timer)
+    {
+        return;
+    }
+
+    AppEvent event;
+    event.Type               = AppEventType::Timer;
+    event.TimerEvent.Context = k_timer_user_data_get(timer);
+    event.Handler            = FunctionTimerEventHandler;
+    PostEvent(event);
+}
+
+void AppTask::FunctionTimerEventHandler(const AppEvent & event)
+{
+    if (event.Type != AppEventType::Timer || !Instance().mFunctionTimerActive)
+    {
+        return;
+    }
+
+    // If we reached here, the button was held past kFactoryResetTriggerTimeout, initiate factory reset
+    if (Instance().mFunction == FunctionEvent::SoftwareUpdate)
+    {
+        LOG_INF("Factory Reset Triggered. Release button within %ums to cancel.", kFactoryResetTriggerTimeout);
+
+        // Start timer for kFactoryResetCancelWindowTimeout to allow user to cancel, if required.
+        Instance().StartTimer(kFactoryResetCancelWindowTimeout);
+        Instance().mFunction = FunctionEvent::FactoryReset;
+
+        // Turn off all LEDs before starting blink to make sure blink is coordinated.
+        sStatusLED.Set(false);
+        sFactoryResetLED.Set(false);
+
+        sStatusLED.Blink(LedConsts::kBlinkRate_ms);
+        sFactoryResetLED.Blink(LedConsts::kBlinkRate_ms);
+    }
+    else if (Instance().mFunction == FunctionEvent::FactoryReset)
+    {
+        // Actually trigger Factory Reset
+        Instance().mFunction = FunctionEvent::NoneSelected;
+        chip::Server::GetInstance().ScheduleFactoryReset();
+    }
+    else if (Instance().mFunction == FunctionEvent::AdvertisingStart)
+    {
+        // The button was held past kAdvertisingTriggerTimeout, start BLE advertisement if we have 2 buttons UI
+        StartBLEAdvertisementHandler(event);
+    }
+}
+
+void AppTask::FunctionHandler(const AppEvent & event)
+{
+    if (event.ButtonEvent.PinNo != FUNCTION_BUTTON)
+        return;
+
+    // To trigger software update: press the FUNCTION_BUTTON button briefly (< FACTORY_RESET_TRIGGER_TIMEOUT)
+    // To initiate factory reset: press the FUNCTION_BUTTON for FACTORY_RESET_TRIGGER_TIMEOUT + FACTORY_RESET_CANCEL_WINDOW_TIMEOUT
+    // All LEDs start blinking after FACTORY_RESET_TRIGGER_TIMEOUT to signal factory reset has been initiated.
+    // To cancel factory reset: release the FUNCTION_BUTTON once all LEDs start blinking within the
+    // FACTORY_RESET_CANCEL_WINDOW_TIMEOUT
+    if (event.ButtonEvent.Action == static_cast<uint8_t>(AppEventType::ButtonPushed))
+    {
+        if (!Instance().mFunctionTimerActive && Instance().mFunction == FunctionEvent::NoneSelected)
+        {
+            Instance().StartTimer(kFactoryResetTriggerTimeout);
+
+            Instance().mFunction = FunctionEvent::SoftwareUpdate;
+        }
+    }
+    else
+    {
+        // If the button was released before factory reset got initiated, trigger a software update.
+        if (Instance().mFunctionTimerActive && Instance().mFunction == FunctionEvent::SoftwareUpdate)
+        {
+            Instance().CancelTimer();
+            Instance().mFunction = FunctionEvent::NoneSelected;
+
+#ifdef CONFIG_MCUMGR_TRANSPORT_BT
+            GetDFUOverSMP().StartServer();
+            UpdateStatusLED();
+#else
+            LOG_INF("Software update is disabled");
+#endif
+        }
+        else if (Instance().mFunctionTimerActive && Instance().mFunction == FunctionEvent::FactoryReset)
+        {
+            sFactoryResetLED.Set(false);
+            UpdateStatusLED();
+            Instance().CancelTimer();
+            Instance().mFunction = FunctionEvent::NoneSelected;
+            LOG_INF("Factory Reset has been Canceled");
+        }
+    }
+}
+
+void AppTask::StartBLEAdvertisementHandler(const AppEvent &)
+{
+    if (Server::GetInstance().GetFabricTable().FabricCount() != 0)
+    {
+        LOG_INF("Matter service BLE advertising not started - device is already commissioned");
+        return;
+    }
+
+    if (ConnectivityMgr().IsBLEAdvertisingEnabled())
+    {
+        LOG_INF("BLE advertising is already enabled");
+        return;
+    }
+
+    if (Server::GetInstance().GetCommissioningWindowManager().OpenBasicCommissioningWindow() != CHIP_NO_ERROR)
+    {
+        LOG_ERR("OpenBasicCommissioningWindow() failed");
+    }
+}
+
+void AppTask::UpdateLedStateEventHandler(const AppEvent & event)
+{
+    if (event.Type == AppEventType::UpdateLedState)
+    {
+        event.UpdateLedStateEvent.LedWidget->UpdateState();
+    }
+}
+
+void AppTask::LEDStateUpdateHandler(LEDWidget & ledWidget)
+{
+    AppEvent event;
+    event.Type                          = AppEventType::UpdateLedState;
+    event.Handler                       = UpdateLedStateEventHandler;
+    event.UpdateLedStateEvent.LedWidget = &ledWidget;
+    PostEvent(event);
+}
+
+void AppTask::UpdateStatusLED()
+{
+#ifdef CONFIG_STATE_LEDS
+    // Update the status LED.
+    //
+    // If IPv6 network and service provisioned, keep the LED On constantly.
+    //
+    // If the system has BLE connection(s) until the stage above, THEN blink the LED at an even
+    // rate of 100ms.
+    //
+    // Otherwise, blink the LED for a very short time.
+    if (sIsNetworkProvisioned && sIsNetworkEnabled)
+    {
+        sStatusLED.Set(true);
+    }
+    else if (sHaveBLEConnections)
+    {
+        sStatusLED.Blink(LedConsts::StatusLed::Unprovisioned::kOn_ms, LedConsts::StatusLed::Unprovisioned::kOff_ms);
+    }
+    else
+    {
+        sStatusLED.Blink(LedConsts::StatusLed::Provisioned::kOn_ms, LedConsts::StatusLed::Provisioned::kOff_ms);
+    }
+#endif
+}
+
+void AppTask::ChipEventHandler(const ChipDeviceEvent * event, intptr_t /* arg */)
+{
+    switch (event->Type)
+    {
+    case DeviceEventType::kCHIPoBLEAdvertisingChange:
+        sHaveBLEConnections = ConnectivityMgr().NumBLEConnections() != 0;
+        UpdateStatusLED();
+        break;
+#if defined(CONFIG_NET_L2_OPENTHREAD)
+    case DeviceEventType::kDnssdInitialized:
+#if CONFIG_CHIP_OTA_REQUESTOR
+        InitBasicOTARequestor();
+#endif // CONFIG_CHIP_OTA_REQUESTOR
+        break;
+    case DeviceEventType::kThreadStateChange:
+        sIsNetworkProvisioned = ConnectivityMgr().IsThreadProvisioned();
+        sIsNetworkEnabled     = ConnectivityMgr().IsThreadAttached();
+#endif
+        UpdateStatusLED();
+        break;
+    default:
+        break;
+    }
+}
+
+void AppTask::CancelTimer()
+{
+    k_timer_stop(&sFunctionTimer);
+    mFunctionTimerActive = false;
+}
+
+void AppTask::StartTimer(uint32_t timeoutInMs)
+{
+    k_timer_start(&sFunctionTimer, K_MSEC(timeoutInMs), K_NO_WAIT);
+    mFunctionTimerActive = true;
+}
+
+void AppTask::ActionInitiated(PWMDevice::Action_t action, int32_t actor)
+{
+    if (action == PWMDevice::ON_ACTION)
+    {
+        LOG_INF("Turn On Action has been initiated");
+    }
+    else if (action == PWMDevice::OFF_ACTION)
+    {
+        LOG_INF("Turn Off Action has been initiated");
+    }
+    else if (action == PWMDevice::LEVEL_ACTION)
+    {
+        LOG_INF("Level Action has been initiated");
+    }
+}
+
+void AppTask::ActionCompleted(PWMDevice::Action_t action, int32_t actor)
+{
+    if (action == PWMDevice::ON_ACTION)
+    {
+        LOG_INF("Turn On Action has been completed");
+    }
+    else if (action == PWMDevice::OFF_ACTION)
+    {
+        LOG_INF("Turn Off Action has been completed");
+    }
+    else if (action == PWMDevice::LEVEL_ACTION)
+    {
+        LOG_INF("Level Action has been completed");
+    }
+
+    if (actor == static_cast<int32_t>(AppEventType::Button))
+    {
+        Instance().UpdateClusterState();
+    }
+}
+
+void AppTask::PostEvent(const AppEvent & event)
+{
+    if (k_msgq_put(&sAppEventQueue, &event, K_NO_WAIT) != 0)
+    {
+        LOG_INF("Failed to post event to app task event queue");
+    }
+}
+
+void AppTask::DispatchEvent(const AppEvent & event)
+{
+    if (event.Handler)
+    {
+        event.Handler(event);
+    }
+    else
+    {
+        LOG_INF("Event received with no handler. Dropping event.");
+    }
+}
+
+void AppTask::UpdateClusterState()
+{
+    SystemLayer().ScheduleLambda([this] {
+        // write the new on/off value
+        EmberAfStatus status = Clusters::OnOff::Attributes::OnOff::Set(kLightEndpointId, mPWMDevice.IsTurnedOn());
+
+        if (status != EMBER_ZCL_STATUS_SUCCESS)
+        {
+            LOG_ERR("Updating on/off cluster failed: %x", status);
+        }
+
+        // write the current level
+        status = Clusters::LevelControl::Attributes::CurrentLevel::Set(kLightEndpointId, mPWMDevice.GetLevel());
+
+        if (status != EMBER_ZCL_STATUS_SUCCESS)
+        {
+            LOG_ERR("Updating level cluster failed: %x", status);
+        }
+    });
+}

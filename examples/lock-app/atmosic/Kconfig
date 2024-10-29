@@ -13,7 +13,7 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 #
-mainmenu "Matter nRF Connect Lock Example Application"
+mainmenu "Matter Atmosic Lock Example Application"
 
 config LOCK_NUM_USERS
 	int "Maximum number of users supported by lock"
